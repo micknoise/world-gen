@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Voronoi Region Map</title>
+    <link rel="stylesheet" href="../../styles.css" />
+  </head>
+  <body>
+    <main class="tutorial-page">
+      <a class="back-link" href="../../index.html">Back to tutorials</a>
+      <section class="tutorial-copy">
+        <h2>What this shows</h2>
+        <p>This places seed points and assigns every tile to the nearest seed. The result is a hard-edged territory map that works well for regions, districts, biomes, or factions.</p>
+        <ul class="meta-list">
+          <li><strong>Good for:</strong> biome zones, territory maps, districts, and influence regions</li>
+          <li><strong>Watch for:</strong> hard edges that may need later smoothing or terrain detail</li>
+        </ul>
+      </section>
+      <section class="tutorial-shell">
+        <article class="panel canvas-panel">
+          <h1>Voronoi Region Map</h1>
+          <p class="summary">Each tile belongs to the nearest region seed.</p>
+          <p class="summary" id="stats"></p>
+          <canvas id="map"></canvas>
+        </article>
+        <aside class="panel">
+          <form id="controls">
+            <div class="control-grid">
+                <div class="field"><label for="seed">Seed</label><input id="seed" type="number" value="1024" step="1" /></div>
+                <div class="field"><label for="width">Width</label><input id="width" type="number" value="52" min="3" step="1" /></div>
+                <div class="field"><label for="height">Height</label><input id="height" type="number" value="36" min="3" step="1" /></div>
+                <div class="field"><label for="regionCount">Regions</label><input id="regionCount" type="number" value="8" min="1" step="1" /></div>
+            </div>
+            <div class="button-row">
+              <button type="submit">Generate</button>
+              <button class="secondary" type="button" id="export-json">Export JSON</button>
+            </div>
+          </form>
+        </aside>
+      </section>
+      <section class="json-panel">
+        <h2>Environment JSON</h2>
+        <pre id="output"></pre>
+      </section>
+    </main>
+    <script>
+      const canvas = document.getElementById("map");
+      const form = document.getElementById("controls");
+      const output = document.getElementById("output");
+      const stats = document.getElementById("stats");
+      const exportButton = document.getElementById("export-json");
+      const BIOMES = ["grass", "desert", "forest", "water", "snow", "marsh"];
+      const COLORS = { grass: "#7cad62", desert: "#d7bb77", forest: "#4f8753", water: "#3a78b9", snow: "#e9eff5", marsh: "#6b8a63" };
+
+      function createRng(seed) {
+        let state = (Number(seed) >>> 0) || 1;
+        return {
+          next() {
+            state = (state + 0x6d2b79f5) | 0;
+            let value = Math.imul(state ^ (state >>> 15), 1 | state);
+            value ^= value + Math.imul(value ^ (value >>> 7), 61 | value);
+            return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+          },
+          int(min, max) {
+            return Math.floor(this.next() * (max - min + 1)) + min;
+          }
+        };
+      }
+
+      function distance(a, b) {
+        return Math.hypot(a.x - b.x, a.y - b.y);
+      }
+
+      function generateEnvironment(seed, width, height, regionCount) {
+        const random = createRng(seed);
+        const sites = [];
+        const tiles = [];
+        const ownerGrid = [];
+        const adjacency = new Set();
+
+        for (let index = 0; index < regionCount; index += 1) {
+          sites.push({ id: `region-${index + 1}`, kind: BIOMES[index % BIOMES.length], x: random.int(2, width - 3), y: random.int(2, height - 3) });
+        }
+
+        for (let y = 0; y < height; y += 1) {
+          const tileRow = [];
+          const ownerRow = [];
+          for (let x = 0; x < width; x += 1) {
+            let nearest = sites[0];
+            let nearestDistance = distance({ x, y }, nearest);
+            for (let index = 1; index < sites.length; index += 1) {
+              const candidate = sites[index];
+              const candidateDistance = distance({ x, y }, candidate);
+              if (candidateDistance < nearestDistance) {
+                nearest = candidate;
+                nearestDistance = candidateDistance;
+              }
+            }
+            tileRow.push(nearest.kind);
+            ownerRow.push(nearest.id);
+          }
+          tiles.push(tileRow);
+          ownerGrid.push(ownerRow);
+        }
+
+        for (let y = 0; y < height; y += 1) {
+          for (let x = 0; x < width; x += 1) {
+            const current = ownerGrid[y][x];
+            if (x + 1 < width && ownerGrid[y][x + 1] !== current) adjacency.add([current, ownerGrid[y][x + 1]].sort().join(":"));
+            if (y + 1 < height && ownerGrid[y + 1][x] !== current) adjacency.add([current, ownerGrid[y + 1][x]].sort().join(":"));
+          }
+        }
+
+        return {
+          version: "1.0",
+          algorithm: "voronoi",
+          seed,
+          space: { mode: "grid", width, height, cellSize: 12 },
+          tiles,
+          regions: sites.map((site) => ({ id: site.id, kind: site.kind, shape: "circle", x: site.x, y: site.y, radius: 0.7 })),
+          graph: {
+            nodes: sites.map((site) => ({ id: site.id, x: site.x, y: site.y })),
+            edges: Array.from(adjacency).map((entry) => {
+              const [source, target] = entry.split(":");
+              return { source, target };
+            })
+          },
+          markers: sites.map((site) => ({ kind: "seed", x: site.x, y: site.y })),
+          metadata: { regionCount: sites.length }
+        };
+      }
+
+      function renderEnvironment(environment) {
+        const cellSize = environment.space.cellSize;
+        canvas.width = environment.space.width * cellSize;
+        canvas.height = environment.space.height * cellSize;
+        const ctx = canvas.getContext("2d");
+
+        for (let y = 0; y < environment.tiles.length; y += 1) {
+          for (let x = 0; x < environment.tiles[y].length; x += 1) {
+            ctx.fillStyle = COLORS[environment.tiles[y][x]];
+            ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+          }
+        }
+
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 1.5;
+        const nodes = new Map(environment.graph.nodes.map((node) => [node.id, node]));
+        for (const edge of environment.graph.edges) {
+          const source = nodes.get(edge.source);
+          const target = nodes.get(edge.target);
+          ctx.beginPath();
+          ctx.moveTo(source.x * cellSize + cellSize / 2, source.y * cellSize + cellSize / 2);
+          ctx.lineTo(target.x * cellSize + cellSize / 2, target.y * cellSize + cellSize / 2);
+          ctx.stroke();
+        }
+
+        for (const marker of environment.markers) {
+          ctx.fillStyle = "#111";
+          ctx.beginPath();
+          ctx.arc(marker.x * cellSize + cellSize / 2, marker.y * cellSize + cellSize / 2, 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      function downloadJson(environment) {
+        const blob = new Blob([`${JSON.stringify(environment, null, 2)}\n`], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "06-voronoi-region-map-sample-output.json";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+
+      function update() {
+        const environment = generateEnvironment(
+          Number(document.getElementById("seed").value),
+          Number(document.getElementById("width").value),
+          Number(document.getElementById("height").value),
+          Number(document.getElementById("regionCount").value)
+        );
+        renderEnvironment(environment);
+        stats.textContent = `Regions: ${environment.metadata.regionCount}, adjacency edges: ${environment.graph.edges.length}.`;
+        output.textContent = JSON.stringify(environment, null, 2);
+        return environment;
+      }
+
+      let currentEnvironment = update();
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        currentEnvironment = update();
+      });
+      exportButton.addEventListener("click", () => downloadJson(currentEnvironment));
+    </script>
+  </body>
+</html>

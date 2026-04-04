@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Quadtree Region Split</title>
+    <link rel="stylesheet" href="../../styles.css" />
+  </head>
+  <body>
+    <main class="tutorial-page">
+      <a class="back-link" href="../../index.html">Back to tutorials</a>
+      <section class="tutorial-copy">
+        <h2>What this shows</h2>
+        <p>This repeatedly splits a rectangle into four smaller rectangles. It is useful for sectors, lots, districts, or chunk planning rather than walkable room maps.</p>
+        <ul class="meta-list">
+          <li><strong>Good for:</strong> zoning, districts, and world subdivision</li>
+          <li><strong>Watch for:</strong> partitions that still need roads or gameplay logic later</li>
+        </ul>
+      </section>
+      <section class="tutorial-shell">
+        <article class="panel canvas-panel">
+          <h1>Quadtree Region Split</h1>
+          <p class="summary">A world rectangle is recursively quartered into smaller sectors.</p>
+          <p class="summary" id="stats"></p>
+          <canvas id="map"></canvas>
+        </article>
+        <aside class="panel">
+          <form id="controls">
+            <div class="control-grid">
+                <div class="field"><label for="seed">Seed</label><input id="seed" type="number" value="256" step="1" /></div>
+                <div class="field"><label for="width">World Width</label><input id="width" type="number" value="100" min="12" step="1" /></div>
+                <div class="field"><label for="height">World Height</label><input id="height" type="number" value="80" min="12" step="1" /></div>
+                <div class="field"><label for="maxDepth">Max Depth</label><input id="maxDepth" type="number" value="3" min="1" step="1" /></div>
+                <div class="field"><label for="splitChance">Split %</label><input id="splitChance" type="number" value="78" min="0" max="100" step="1" /></div>
+            </div>
+            <div class="button-row">
+              <button type="submit">Generate</button>
+              <button class="secondary" type="button" id="export-json">Export JSON</button>
+            </div>
+          </form>
+        </aside>
+      </section>
+      <section class="json-panel">
+        <h2>Environment JSON</h2>
+        <pre id="output"></pre>
+      </section>
+    </main>
+    <script>
+      const canvas = document.getElementById("map");
+      const form = document.getElementById("controls");
+      const output = document.getElementById("output");
+      const stats = document.getElementById("stats");
+      const exportButton = document.getElementById("export-json");
+
+      function createRng(seed) {
+        let state = (Number(seed) >>> 0) || 1;
+        return function next() {
+          state = (state + 0x6d2b79f5) | 0;
+          let value = Math.imul(state ^ (state >>> 15), 1 | state);
+          value ^= value + Math.imul(value ^ (value >>> 7), 61 | value);
+          return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
+      function addLeaf(region, regions) {
+        regions.push({
+          id: `sector-${regions.length + 1}`,
+          kind: "sector",
+          shape: "rect",
+          x: region.x,
+          y: region.y,
+          width: region.width,
+          height: region.height
+        });
+      }
+
+      function splitRegion(region, random, maxDepth, splitChance, minSize, forceSplitDepth, regions) {
+        const canSplit =
+          region.depth < maxDepth &&
+          Math.floor(region.width / 2) >= minSize &&
+          Math.floor(region.height / 2) >= minSize;
+        const shouldSplit = canSplit && (region.depth < forceSplitDepth || random() < splitChance / 100);
+        if (!shouldSplit) {
+          addLeaf(region, regions);
+          return;
+        }
+
+        const leftWidth = Math.floor(region.width / 2);
+        const rightWidth = region.width - leftWidth;
+        const topHeight = Math.floor(region.height / 2);
+        const bottomHeight = region.height - topHeight;
+        const nextDepth = region.depth + 1;
+
+        splitRegion({ x: region.x, y: region.y, width: leftWidth, height: topHeight, depth: nextDepth }, random, maxDepth, splitChance, minSize, forceSplitDepth, regions);
+        splitRegion({ x: region.x + leftWidth, y: region.y, width: rightWidth, height: topHeight, depth: nextDepth }, random, maxDepth, splitChance, minSize, forceSplitDepth, regions);
+        splitRegion({ x: region.x, y: region.y + topHeight, width: leftWidth, height: bottomHeight, depth: nextDepth }, random, maxDepth, splitChance, minSize, forceSplitDepth, regions);
+        splitRegion({ x: region.x + leftWidth, y: region.y + topHeight, width: rightWidth, height: bottomHeight, depth: nextDepth }, random, maxDepth, splitChance, minSize, forceSplitDepth, regions);
+      }
+
+      function generateEnvironment(seed, width, height, maxDepth, splitChance) {
+        const random = createRng(seed);
+        const regions = [];
+        splitRegion({ x: 0, y: 0, width: Math.floor(width), height: Math.floor(height), depth: 0 }, random, maxDepth, splitChance, 12, 1, regions);
+        return {
+          version: "1.0",
+          algorithm: "quadtree",
+          seed,
+          space: { mode: "continuous", width, height },
+          regions,
+          markers: regions.slice(0, 8).map((region) => ({ kind: "center", x: region.x + region.width / 2, y: region.y + region.height / 2 })),
+          metadata: { regionCount: regions.length, maxDepth }
+        };
+      }
+
+      function renderEnvironment(environment) {
+        const scale = 8;
+        const colors = ["#d57a66", "#5a8f7b", "#d0a95f", "#6b8bc9", "#b484c4", "#8f784f"];
+        canvas.width = environment.space.width * scale;
+        canvas.height = environment.space.height * scale;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        environment.regions.forEach((region, index) => {
+          ctx.fillStyle = `${colors[index % colors.length]}88`;
+          ctx.strokeStyle = colors[index % colors.length];
+          ctx.fillRect(region.x * scale, region.y * scale, region.width * scale, region.height * scale);
+          ctx.strokeRect(region.x * scale, region.y * scale, region.width * scale, region.height * scale);
+        });
+      }
+
+      function downloadJson(environment) {
+        const blob = new Blob([`${JSON.stringify(environment, null, 2)}\n`], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "04-quadtree-region-split-sample-output.json";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+
+      function update() {
+        const environment = generateEnvironment(
+          Number(document.getElementById("seed").value),
+          Number(document.getElementById("width").value),
+          Number(document.getElementById("height").value),
+          Number(document.getElementById("maxDepth").value),
+          Number(document.getElementById("splitChance").value)
+        );
+        renderEnvironment(environment);
+        stats.textContent = `Leaf regions: ${environment.metadata.regionCount}.`;
+        output.textContent = JSON.stringify(environment, null, 2);
+        return environment;
+      }
+
+      let currentEnvironment = update();
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        currentEnvironment = update();
+      });
+      exportButton.addEventListener("click", () => downloadJson(currentEnvironment));
+    </script>
+  </body>
+</html>

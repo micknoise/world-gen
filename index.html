@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>World Generation Tutorials</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="landing-page">
+      <section class="hero">
+        <p class="eyebrow">JavaScript Tutorials</p>
+        <h1>World generation algorithms rendered from shared JSON.</h1>
+        <p class="lede">
+          These tutorials focus on clarity: one algorithm, one environment object, one Canvas demo.
+          Each example is designed to show how the algorithm works and what kind of map it produces.
+        </p>
+      </section>
+
+      <section class="card-grid">
+        <a class="tutorial-card" href="./tutorials/01-random-walk/index.html">
+          <span>01</span>
+          <h2>Random Walk Dungeon</h2>
+          <p>Carves loose cave-like floor space by repeatedly stepping through a grid.</p>
+        </a>
+        <a class="tutorial-card" href="./tutorials/02-cellular-automata/index.html">
+          <span>02</span>
+          <h2>Cellular Automata Cave</h2>
+          <p>Smooths random noise into organic cave walls and open chambers.</p>
+        </a>
+        <a class="tutorial-card" href="./tutorials/03-bsp-dungeon/index.html">
+          <span>03</span>
+          <h2>BSP Dungeon</h2>
+          <p>Splits the map recursively into partitions, then places rooms and corridors.</p>
+        </a>
+        <a class="tutorial-card" href="./tutorials/04-quadtree-region-split/index.html">
+          <span>04</span>
+          <h2>Quadtree Region Split</h2>
+          <p>Subdivides a world into sectors that can become districts, lots, or zones.</p>
+        </a>
+        <a class="tutorial-card" href="./tutorials/05-rectangle-packing/index.html">
+          <span>05</span>
+          <h2>Rectangle Packing Rooms</h2>
+          <p>Places non-overlapping rooms and links them into a simple layout graph.</p>
+        </a>
+        <a class="tutorial-card" href="./tutorials/06-voronoi-region-map/index.html">
+          <span>06</span>
+          <h2>Voronoi Region Map</h2>
+          <p>Assigns tiles to the nearest seed to create territories, biomes, and borders.</p>
+        </a>
+        <a class="tutorial-card" href="./tutorials/07-delaunay-mst-room-graph/index.html">
+          <span>07</span>
+          <h2>Delaunay + MST Room Graph</h2>
+          <p>Builds a clean connection network between room centers or settlements.</p>
+        </a>
+        <a class="tutorial-card" href="./tutorials/08-noise-terrain/index.html">
+          <span>08</span>
+          <h2>Noise Terrain Map</h2>
+          <p>Turns sampled noise into land, coast, plains, and mountain regions.</p>
+        </a>
+      </section>
+
+      <section class="note-panel">
+        <h2>Shared approach</h2>
+        <p>
+          Every tutorial exports an environment JSON object before drawing. That keeps the algorithm
+          separate from the renderer and makes the data portable to other engines.
+        </p>
+        <p>
+          See <a href="./tutorial-specification.md">tutorial-specification.md</a> for the full project specification.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

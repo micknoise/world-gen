@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rectangle Packing Rooms</title>
+    <link rel="stylesheet" href="../../styles.css" />
+  </head>
+  <body>
+    <main class="tutorial-page">
+      <a class="back-link" href="../../index.html">Back to tutorials</a>
+      <section class="tutorial-copy">
+        <h2>What this shows</h2>
+        <p>This repeatedly tries to place random room rectangles without overlap. Once the rooms are placed, each room connects to its nearest earlier room to make a simple layout graph.</p>
+        <ul class="meta-list">
+          <li><strong>Good for:</strong> teaching room placement and density tradeoffs</li>
+          <li><strong>Watch for:</strong> failed placements as the world fills up, and missing corridor carving</li>
+        </ul>
+      </section>
+      <section class="tutorial-shell">
+        <article class="panel canvas-panel">
+          <h1>Rectangle Packing Rooms</h1>
+          <p class="summary">Non-overlapping rectangles give you a set of room footprints.</p>
+          <p class="summary" id="stats"></p>
+          <canvas id="map"></canvas>
+        </article>
+        <aside class="panel">
+          <form id="controls">
+            <div class="control-grid">
+                <div class="field"><label for="seed">Seed</label><input id="seed" type="number" value="512" step="1" /></div>
+                <div class="field"><label for="width">World Width</label><input id="width" type="number" value="100" min="8" step="1" /></div>
+                <div class="field"><label for="height">World Height</label><input id="height" type="number" value="72" min="8" step="1" /></div>
+                <div class="field"><label for="roomCount">Rooms</label><input id="roomCount" type="number" value="12" min="1" step="1" /></div>
+                <div class="field"><label for="minRoomSize">Min Room Size</label><input id="minRoomSize" type="number" value="8" min="1" step="1" /></div>
+                <div class="field"><label for="maxRoomSize">Max Room Size</label><input id="maxRoomSize" type="number" value="16" min="1" step="1" /></div>
+            </div>
+            <div class="button-row">
+              <button type="submit">Generate</button>
+              <button class="secondary" type="button" id="export-json">Export JSON</button>
+            </div>
+          </form>
+        </aside>
+      </section>
+      <section class="json-panel">
+        <h2>Environment JSON</h2>
+        <pre id="output"></pre>
+      </section>
+    </main>
+    <script>
+      const canvas = document.getElementById("map");
+      const form = document.getElementById("controls");
+      const output = document.getElementById("output");
+      const stats = document.getElementById("stats");
+      const exportButton = document.getElementById("export-json");
+
+      function createRng(seed) {
+        let state = (Number(seed) >>> 0) || 1;
+        return {
+          next() {
+            state = (state + 0x6d2b79f5) | 0;
+            let value = Math.imul(state ^ (state >>> 15), 1 | state);
+            value ^= value + Math.imul(value ^ (value >>> 7), 61 | value);
+            return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+          },
+          int(min, max) {
+            return Math.floor(this.next() * (max - min + 1)) + min;
+          }
+        };
+      }
+
+      function distance(a, b) {
+        return Math.hypot(a.x - b.x, a.y - b.y);
+      }
+
+      function overlaps(a, b, padding) {
+        return !(
+          a.x + a.width + padding <= b.x ||
+          b.x + b.width + padding <= a.x ||
+          a.y + a.height + padding <= b.y ||
+          b.y + b.height + padding <= a.y
+        );
+      }
+
+      function generateEnvironment(seed, width, height, roomCount, minRoomSize, maxRoomSize) {
+        const random = createRng(seed);
+        const regions = [];
+        const nodes = [];
+        const edges = [];
+        const paths = [];
+        let attempts = 0;
+
+        while (regions.length < roomCount && attempts < roomCount * 25) {
+          attempts += 1;
+          const roomWidth = random.int(minRoomSize, maxRoomSize);
+          const roomHeight = random.int(minRoomSize, maxRoomSize);
+          const room = {
+            id: `room-${regions.length + 1}`,
+            kind: "room",
+            shape: "rect",
+            x: random.int(0, width - roomWidth),
+            y: random.int(0, height - roomHeight),
+            width: roomWidth,
+            height: roomHeight
+          };
+          if (regions.some((existing) => overlaps(existing, room, 2))) continue;
+          regions.push(room);
+        }
+
+        for (const room of regions) {
+          nodes.push({ id: room.id, x: room.x + room.width / 2, y: room.y + room.height / 2 });
+        }
+
+        for (let index = 1; index < nodes.length; index += 1) {
+          const node = nodes[index];
+          let nearest = nodes[index - 1];
+          let nearestDistance = distance(node, nearest);
+          for (let candidateIndex = 0; candidateIndex < index; candidateIndex += 1) {
+            const candidate = nodes[candidateIndex];
+            const candidateDistance = distance(node, candidate);
+            if (candidateDistance < nearestDistance) {
+              nearest = candidate;
+              nearestDistance = candidateDistance;
+            }
+          }
+          edges.push({ source: node.id, target: nearest.id });
+          paths.push({ id: `path-${paths.length + 1}`, kind: "hall-link", points: [{ x: node.x, y: node.y }, { x: nearest.x, y: nearest.y }] });
+        }
+
+        return {
+          version: "1.0",
+          algorithm: "rectangle-packing",
+          seed,
+          space: { mode: "continuous", width, height },
+          regions,
+          paths,
+          graph: { nodes, edges },
+          metadata: { roomCount: regions.length, attempts }
+        };
+      }
+
+      function renderEnvironment(environment) {
+        const scale = 8;
+        canvas.width = environment.space.width * scale;
+        canvas.height = environment.space.height * scale;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.strokeStyle = "#9b6b3f";
+        ctx.lineWidth = 2;
+        for (const path of environment.paths) {
+          ctx.beginPath();
+          ctx.moveTo(path.points[0].x * scale, path.points[0].y * scale);
+          ctx.lineTo(path.points[1].x * scale, path.points[1].y * scale);
+          ctx.stroke();
+        }
+
+        ctx.fillStyle = "#d9d2c3";
+        ctx.strokeStyle = "#27313a";
+        for (const region of environment.regions) {
+          ctx.fillRect(region.x * scale, region.y * scale, region.width * scale, region.height * scale);
+          ctx.strokeRect(region.x * scale, region.y * scale, region.width * scale, region.height * scale);
+        }
+      }
+
+      function downloadJson(environment) {
+        const blob = new Blob([`${JSON.stringify(environment, null, 2)}\n`], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "05-rectangle-packing-sample-output.json";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+
+      function update() {
+        const environment = generateEnvironment(
+          Number(document.getElementById("seed").value),
+          Number(document.getElementById("width").value),
+          Number(document.getElementById("height").value),
+          Number(document.getElementById("roomCount").value),
+          Number(document.getElementById("minRoomSize").value),
+          Number(document.getElementById("maxRoomSize").value)
+        );
+        renderEnvironment(environment);
+        stats.textContent = `Placed rooms: ${environment.metadata.roomCount} after ${environment.metadata.attempts} attempts.`;
+        output.textContent = JSON.stringify(environment, null, 2);
+        return environment;
+      }
+
+      let currentEnvironment = update();
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        currentEnvironment = update();
+      });
+      exportButton.addEventListener("click", () => downloadJson(currentEnvironment));
+    </script>
+  </body>
+</html>

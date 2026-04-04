@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cellular Automata Cave</title>
+    <link rel="stylesheet" href="../../styles.css" />
+  </head>
+  <body>
+    <main class="tutorial-page">
+      <a class="back-link" href="../../index.html">Back to tutorials</a>
+      <section class="tutorial-copy">
+        <h2>What this shows</h2>
+        <p>This starts from random wall noise and repeatedly smooths the grid using a simple neighbor rule. The result is a more organic cave shape than a room-based layout.</p>
+        <ul class="meta-list">
+          <li><strong>Good for:</strong> caves, caverns, and natural underground spaces</li>
+          <li><strong>Watch for:</strong> disconnected pockets and over-smoothing</li>
+        </ul>
+      </section>
+      <section class="tutorial-shell">
+        <article class="panel canvas-panel">
+          <h1>Cellular Automata Cave</h1>
+          <p class="summary">Random noise becomes cave space after repeated smoothing.</p>
+          <p class="summary" id="stats"></p>
+          <canvas id="map"></canvas>
+        </article>
+        <aside class="panel">
+          <form id="controls">
+            <div class="control-grid">
+                <div class="field"><label for="seed">Seed</label><input id="seed" type="number" value="84" step="1" /></div>
+                <div class="field"><label for="width">Width</label><input id="width" type="number" value="48" min="3" step="1" /></div>
+                <div class="field"><label for="height">Height</label><input id="height" type="number" value="36" min="3" step="1" /></div>
+                <div class="field"><label for="fillChance">Initial Wall %</label><input id="fillChance" type="number" value="46" min="0" max="100" step="1" /></div>
+                <div class="field"><label for="iterations">Iterations</label><input id="iterations" type="number" value="5" min="1" step="1" /></div>
+            </div>
+            <div class="button-row">
+              <button type="submit">Generate</button>
+              <button class="secondary" type="button" id="export-json">Export JSON</button>
+            </div>
+          </form>
+        </aside>
+      </section>
+      <section class="json-panel">
+        <h2>Environment JSON</h2>
+        <pre id="output"></pre>
+      </section>
+    </main>
+    <script>
+      const canvas = document.getElementById("map");
+      const form = document.getElementById("controls");
+      const output = document.getElementById("output");
+      const stats = document.getElementById("stats");
+      const exportButton = document.getElementById("export-json");
+
+      function createRng(seed) {
+        let state = (Number(seed) >>> 0) || 1;
+        return function next() {
+          state = (state + 0x6d2b79f5) | 0;
+          let value = Math.imul(state ^ (state >>> 15), 1 | state);
+          value ^= value + Math.imul(value ^ (value >>> 7), 61 | value);
+          return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
+      function createGrid(width, height, fill) {
+        return Array.from({ length: height }, () => Array.from({ length: width }, () => fill));
+      }
+
+      function countWallNeighbors(tiles, x, y) {
+        let walls = 0;
+        for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
+          for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
+            if (offsetX === 0 && offsetY === 0) continue;
+            const nx = x + offsetX;
+            const ny = y + offsetY;
+            if (!tiles[ny] || !tiles[ny][nx] || tiles[ny][nx] === "wall") walls += 1;
+          }
+        }
+        return walls;
+      }
+
+      function countFloorTiles(tiles) {
+        let total = 0;
+        for (const row of tiles) for (const tile of row) if (tile === "floor") total += 1;
+        return total;
+      }
+
+      function findStart(tiles) {
+        for (let y = 1; y < tiles.length - 1; y += 1) {
+          for (let x = 1; x < tiles[y].length - 1; x += 1) {
+            if (tiles[y][x] === "floor") return { x, y };
+          }
+        }
+        return { x: 1, y: 1 };
+      }
+
+      function generateEnvironment(seed, width, height, fillChance, iterations) {
+        const random = createRng(seed);
+        let tiles = createGrid(width, height, "wall");
+
+        for (let y = 0; y < height; y += 1) {
+          for (let x = 0; x < width; x += 1) {
+            if (x === 0 || y === 0 || x === width - 1 || y === height - 1) tiles[y][x] = "wall";
+            else tiles[y][x] = random() < fillChance / 100 ? "wall" : "floor";
+          }
+        }
+
+        for (let iteration = 0; iteration < iterations; iteration += 1) {
+          const nextTiles = createGrid(width, height, "wall");
+          for (let y = 1; y < height - 1; y += 1) {
+            for (let x = 1; x < width - 1; x += 1) {
+              nextTiles[y][x] = countWallNeighbors(tiles, x, y) >= 5 ? "wall" : "floor";
+            }
+          }
+          tiles = nextTiles;
+        }
+
+        const start = findStart(tiles);
+        return {
+          version: "1.0",
+          algorithm: "cellular-automata",
+          seed,
+          space: { mode: "grid", width, height, cellSize: 12 },
+          tiles,
+          markers: [{ kind: "start", x: start.x, y: start.y }],
+          metadata: { iterations, fillChance, floorTiles: countFloorTiles(tiles) }
+        };
+      }
+
+      function renderEnvironment(environment) {
+        const cellSize = environment.space.cellSize;
+        canvas.width = environment.space.width * cellSize;
+        canvas.height = environment.space.height * cellSize;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#27313a";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        for (let y = 0; y < environment.tiles.length; y += 1) {
+          for (let x = 0; x < environment.tiles[y].length; x += 1) {
+            if (environment.tiles[y][x] !== "floor") continue;
+            ctx.fillStyle = "#d9d2c3";
+            ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+          }
+        }
+
+        const start = environment.markers[0];
+        ctx.fillStyle = "#ff7f50";
+        ctx.beginPath();
+        ctx.arc(start.x * cellSize + cellSize / 2, start.y * cellSize + cellSize / 2, 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      function downloadJson(environment) {
+        const blob = new Blob([`${JSON.stringify(environment, null, 2)}\n`], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "02-cellular-automata-sample-output.json";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+
+      function update() {
+        const environment = generateEnvironment(
+          Number(document.getElementById("seed").value),
+          Number(document.getElementById("width").value),
+          Number(document.getElementById("height").value),
+          Number(document.getElementById("fillChance").value),
+          Number(document.getElementById("iterations").value)
+        );
+        renderEnvironment(environment);
+        stats.textContent = `Floor tiles: ${environment.metadata.floorTiles} after ${environment.metadata.iterations} smoothing steps.`;
+        output.textContent = JSON.stringify(environment, null, 2);
+        return environment;
+      }
+
+      let currentEnvironment = update();
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        currentEnvironment = update();
+      });
+      exportButton.addEventListener("click", () => downloadJson(currentEnvironment));
+    </script>
+  </body>
+</html>

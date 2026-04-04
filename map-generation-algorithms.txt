@@ -1,0 +1,15 @@
+	•	Binary Space Partitioning
+	•	Quadtree
+	•	Bin Packing Problem
+	•	MaxRects algorithm
+	•	Shelf packing
+	•	Skyline packing
+	•	Guillotine packing
+	•	Circle packing
+	•	Force-directed layout
+	•	Voronoi diagram
+	•	Delaunay triangulation
+	•	Minimum Spanning Tree (MST)
+	•	Cellular automata
+	•	Polygon triangulation
+	•	Nesting problem

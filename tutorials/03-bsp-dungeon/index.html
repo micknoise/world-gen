@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BSP Dungeon</title>
+    <link rel="stylesheet" href="../../styles.css" />
+  </head>
+  <body>
+    <main class="tutorial-page">
+      <a class="back-link" href="../../index.html">Back to tutorials</a>
+      <section class="tutorial-copy">
+        <h2>What this shows</h2>
+        <p>This splits the map into large rectangles, then smaller rectangles, then places one room inside each leaf rectangle. Corridors connect sibling branches, which gives a clear room-and-corridor dungeon.</p>
+        <ul class="meta-list">
+          <li><strong>Good for:</strong> readable dungeon layouts with clear rooms and corridors</li>
+          <li><strong>Watch for:</strong> a regular, mechanical feel unless you add variation later</li>
+        </ul>
+      </section>
+      <section class="tutorial-shell">
+        <article class="panel canvas-panel">
+          <h1>BSP Dungeon</h1>
+          <p class="summary">Recursive partitioning makes room slots first, then connects them.</p>
+          <p class="summary" id="stats"></p>
+          <canvas id="map"></canvas>
+        </article>
+        <aside class="panel">
+          <form id="controls">
+            <div class="control-grid">
+                <div class="field"><label for="seed">Seed</label><input id="seed" type="number" value="126" step="1" /></div>
+                <div class="field"><label for="width">Width</label><input id="width" type="number" value="56" min="12" step="1" /></div>
+                <div class="field"><label for="height">Height</label><input id="height" type="number" value="40" min="12" step="1" /></div>
+                <div class="field"><label for="minLeafSize">Min Leaf Size</label><input id="minLeafSize" type="number" value="10" min="4" step="1" /></div>
+                <div class="field"><label for="maxDepth">Max Depth</label><input id="maxDepth" type="number" value="4" min="1" step="1" /></div>
+            </div>
+            <div class="button-row">
+              <button type="submit">Generate</button>
+              <button class="secondary" type="button" id="export-json">Export JSON</button>
+            </div>
+          </form>
+        </aside>
+      </section>
+      <section class="json-panel">
+        <h2>Environment JSON</h2>
+        <pre id="output"></pre>
+      </section>
+    </main>
+    <script>
+      const canvas = document.getElementById("map");
+      const form = document.getElementById("controls");
+      const output = document.getElementById("output");
+      const stats = document.getElementById("stats");
+      const exportButton = document.getElementById("export-json");
+
+      function createRng(seed) {
+        let state = (Number(seed) >>> 0) || 1;
+        return {
+          next() {
+            state = (state + 0x6d2b79f5) | 0;
+            let value = Math.imul(state ^ (state >>> 15), 1 | state);
+            value ^= value + Math.imul(value ^ (value >>> 7), 61 | value);
+            return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+          },
+          int(min, max) {
+            return Math.floor(this.next() * (max - min + 1)) + min;
+          }
+        };
+      }
+
+      function createGrid(width, height, fill) {
+        return Array.from({ length: height }, () => Array.from({ length: width }, () => fill));
+      }
+
+      function makeNode(x, y, width, height, depth) {
+        return { x, y, width, height, depth, left: null, right: null, room: null, center: null };
+      }
+
+      function splitNode(node, random, minLeafSize, maxDepth) {
+        const canSplitWide = node.width >= minLeafSize * 2;
+        const canSplitTall = node.height >= minLeafSize * 2;
+        if (node.depth >= maxDepth || (!canSplitWide && !canSplitTall)) return;
+
+        let splitVertical = node.width > node.height;
+        if (canSplitWide && canSplitTall) splitVertical = random.next() < 0.5;
+        else if (!canSplitWide) splitVertical = false;
+
+        if (splitVertical) {
+          const splitAt = random.int(minLeafSize, node.width - minLeafSize);
+          node.left = makeNode(node.x, node.y, splitAt, node.height, node.depth + 1);
+          node.right = makeNode(node.x + splitAt, node.y, node.width - splitAt, node.height, node.depth + 1);
+        } else {
+          const splitAt = random.int(minLeafSize, node.height - minLeafSize);
+          node.left = makeNode(node.x, node.y, node.width, splitAt, node.depth + 1);
+          node.right = makeNode(node.x, node.y + splitAt, node.width, node.height - splitAt, node.depth + 1);
+        }
+
+        splitNode(node.left, random, minLeafSize, maxDepth);
+        splitNode(node.right, random, minLeafSize, maxDepth);
+      }
+
+      function gatherLeaves(node, leaves) {
+        if (!node.left && !node.right) {
+          leaves.push(node);
+          return;
+        }
+        if (node.left) gatherLeaves(node.left, leaves);
+        if (node.right) gatherLeaves(node.right, leaves);
+      }
+
+      function carveRoom(node, random) {
+        const maxRoomWidth = Math.max(4, node.width - 2);
+        const maxRoomHeight = Math.max(4, node.height - 2);
+        const roomWidth = random.int(4, maxRoomWidth);
+        const roomHeight = random.int(4, maxRoomHeight);
+        const x = random.int(node.x + 1, node.x + node.width - roomWidth - 1);
+        const y = random.int(node.y + 1, node.y + node.height - roomHeight - 1);
+        node.room = { id: `room-${x}-${y}`, kind: "room", shape: "rect", x, y, width: roomWidth, height: roomHeight };
+        node.center = { x: Math.floor(x + roomWidth / 2), y: Math.floor(y + roomHeight / 2) };
+      }
+
+      function carveRoomTiles(tiles, room) {
+        for (let y = room.y; y < room.y + room.height; y += 1) {
+          for (let x = room.x; x < room.x + room.width; x += 1) tiles[y][x] = "floor";
+        }
+      }
+
+      function carveCorridor(tiles, start, end) {
+        const points = [{ x: start.x, y: start.y }];
+        let x = start.x;
+        let y = start.y;
+        while (x !== end.x) {
+          tiles[y][x] = "floor";
+          x += x < end.x ? 1 : -1;
+          points.push({ x, y });
+        }
+        while (y !== end.y) {
+          tiles[y][x] = "floor";
+          y += y < end.y ? 1 : -1;
+          points.push({ x, y });
+        }
+        tiles[y][x] = "floor";
+        return points;
+      }
+
+      function connectTree(node, tiles, paths) {
+        if (!node.left && !node.right) return node.center;
+        const leftCenter = connectTree(node.left, tiles, paths);
+        const rightCenter = connectTree(node.right, tiles, paths);
+        paths.push({ id: `corridor-${paths.length + 1}`, kind: "corridor", points: carveCorridor(tiles, leftCenter, rightCenter) });
+        node.center = { x: Math.floor((leftCenter.x + rightCenter.x) / 2), y: Math.floor((leftCenter.y + rightCenter.y) / 2) };
+        return node.center;
+      }
+
+      function countFloorTiles(tiles) {
+        let total = 0;
+        for (const row of tiles) for (const tile of row) if (tile === "floor") total += 1;
+        return total;
+      }
+
+      function generateEnvironment(seed, width, height, minLeafSize, maxDepth) {
+        const random = createRng(seed);
+        const root = makeNode(1, 1, width - 2, height - 2, 0);
+        splitNode(root, random, minLeafSize, maxDepth);
+
+        const leaves = [];
+        gatherLeaves(root, leaves);
+        const tiles = createGrid(width, height, "wall");
+        const regions = [];
+        const nodes = [];
+
+        for (const leaf of leaves) {
+          carveRoom(leaf, random);
+          carveRoomTiles(tiles, leaf.room);
+          regions.push(leaf.room);
+          nodes.push({ id: leaf.room.id, x: leaf.center.x, y: leaf.center.y });
+        }
+
+        const paths = [];
+        connectTree(root, tiles, paths);
+        const edges = [];
+        for (let index = 1; index < nodes.length; index += 1) {
+          edges.push({ source: nodes[index - 1].id, target: nodes[index].id });
+        }
+
+        return {
+          version: "1.0",
+          algorithm: "bsp",
+          seed,
+          space: { mode: "grid", width, height, cellSize: 12 },
+          tiles,
+          regions,
+          paths,
+          graph: { nodes, edges },
+          markers: nodes.length ? [{ kind: "start", x: nodes[0].x, y: nodes[0].y }] : [],
+          metadata: { roomCount: regions.length, corridorCount: paths.length, floorTiles: countFloorTiles(tiles) }
+        };
+      }
+
+      function renderEnvironment(environment) {
+        const cellSize = environment.space.cellSize;
+        canvas.width = environment.space.width * cellSize;
+        canvas.height = environment.space.height * cellSize;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#27313a";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        for (let y = 0; y < environment.tiles.length; y += 1) {
+          for (let x = 0; x < environment.tiles[y].length; x += 1) {
+            if (environment.tiles[y][x] !== "floor") continue;
+            ctx.fillStyle = "#d9d2c3";
+            ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+          }
+        }
+
+        ctx.strokeStyle = "#9b6b3f";
+        ctx.lineWidth = 2;
+        for (const path of environment.paths) {
+          if (!path.points.length) continue;
+          ctx.beginPath();
+          ctx.moveTo(path.points[0].x * cellSize + cellSize / 2, path.points[0].y * cellSize + cellSize / 2);
+          for (let index = 1; index < path.points.length; index += 1) {
+            ctx.lineTo(path.points[index].x * cellSize + cellSize / 2, path.points[index].y * cellSize + cellSize / 2);
+          }
+          ctx.stroke();
+        }
+
+        if (environment.markers.length) {
+          const marker = environment.markers[0];
+          ctx.fillStyle = "#ff7f50";
+          ctx.beginPath();
+          ctx.arc(marker.x * cellSize + cellSize / 2, marker.y * cellSize + cellSize / 2, 5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      function downloadJson(environment) {
+        const blob = new Blob([`${JSON.stringify(environment, null, 2)}\n`], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "03-bsp-dungeon-sample-output.json";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+
+      function update() {
+        const environment = generateEnvironment(
+          Number(document.getElementById("seed").value),
+          Number(document.getElementById("width").value),
+          Number(document.getElementById("height").value),
+          Number(document.getElementById("minLeafSize").value),
+          Number(document.getElementById("maxDepth").value)
+        );
+        renderEnvironment(environment);
+        stats.textContent = `Rooms: ${environment.metadata.roomCount}, corridors: ${environment.metadata.corridorCount}.`;
+        output.textContent = JSON.stringify(environment, null, 2);
+        return environment;
+      }
+
+      let currentEnvironment = update();
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        currentEnvironment = update();
+      });
+      exportButton.addEventListener("click", () => downloadJson(currentEnvironment));
+    </script>
+  </body>
+</html>

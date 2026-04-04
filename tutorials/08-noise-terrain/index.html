@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Noise Terrain Map</title>
+    <link rel="stylesheet" href="../../styles.css" />
+  </head>
+  <body>
+    <main class="tutorial-page">
+      <a class="back-link" href="../../index.html">Back to tutorials</a>
+      <section class="tutorial-copy">
+        <h2>What this shows</h2>
+        <p>This samples layered value noise across a grid and classifies the result into water, coast, plains, hills, and rock. A radial falloff makes the output read more like an island.</p>
+        <ul class="meta-list">
+          <li><strong>Good for:</strong> terrain masks, islands, and simple overworlds</li>
+          <li><strong>Watch for:</strong> threshold tuning and repetitive patterns at poor scales</li>
+        </ul>
+      </section>
+      <section class="tutorial-shell">
+        <article class="panel canvas-panel">
+          <h1>Noise Terrain Map</h1>
+          <p class="summary">Layered value noise turns a grid into sea, coast, plains, hills, and mountains.</p>
+          <p class="summary" id="stats"></p>
+          <canvas id="map"></canvas>
+        </article>
+        <aside class="panel">
+          <form id="controls">
+            <div class="control-grid">
+                <div class="field"><label for="seed">Seed</label><input id="seed" type="number" value="4096" step="1" /></div>
+                <div class="field"><label for="width">Width</label><input id="width" type="number" value="72" min="2" step="1" /></div>
+                <div class="field"><label for="height">Height</label><input id="height" type="number" value="48" min="2" step="1" /></div>
+                <div class="field"><label for="scale">Noise Scale</label><input id="scale" type="number" value="18" min="1" step="1" /></div>
+                <div class="field"><label for="octaves">Octaves</label><input id="octaves" type="number" value="4" min="1" step="1" /></div>
+                <div class="field"><label for="waterLevel">Water Level %</label><input id="waterLevel" type="number" value="18" min="0" max="100" step="1" /></div>
+            </div>
+            <div class="button-row">
+              <button type="submit">Generate</button>
+              <button class="secondary" type="button" id="export-json">Export JSON</button>
+            </div>
+          </form>
+        </aside>
+      </section>
+      <section class="json-panel">
+        <h2>Environment JSON</h2>
+        <pre id="output"></pre>
+      </section>
+    </main>
+    <script>
+      const canvas = document.getElementById("map");
+      const form = document.getElementById("controls");
+      const output = document.getElementById("output");
+      const stats = document.getElementById("stats");
+      const exportButton = document.getElementById("export-json");
+
+      function hash2d(x, y, seed) {
+        const value = Math.sin(x * 127.1 + y * 311.7 + seed * 74.7) * 43758.5453123;
+        return value - Math.floor(value);
+      }
+
+      function smoothstep(value) {
+        return value * value * (3 - 2 * value);
+      }
+
+      function lerp(a, b, amount) {
+        return a + (b - a) * amount;
+      }
+
+      function valueNoise(x, y, seed) {
+        const x0 = Math.floor(x);
+        const y0 = Math.floor(y);
+        const x1 = x0 + 1;
+        const y1 = y0 + 1;
+        const sx = smoothstep(x - x0);
+        const sy = smoothstep(y - y0);
+        const ix0 = lerp(hash2d(x0, y0, seed), hash2d(x1, y0, seed), sx);
+        const ix1 = lerp(hash2d(x0, y1, seed), hash2d(x1, y1, seed), sx);
+        return lerp(ix0, ix1, sy);
+      }
+
+      function fractalNoise(x, y, seed, octaves) {
+        let amplitude = 1;
+        let frequency = 1;
+        let total = 0;
+        let normalization = 0;
+        for (let octave = 0; octave < octaves; octave += 1) {
+          total += valueNoise(x * frequency, y * frequency, seed + octave * 17) * amplitude;
+          normalization += amplitude;
+          amplitude *= 0.5;
+          frequency *= 2;
+        }
+        return total / normalization;
+      }
+
+      function generateEnvironment(seed, width, height, scale, octaves, waterLevel) {
+        const tiles = [];
+        for (let y = 0; y < height; y += 1) {
+          const row = [];
+          for (let x = 0; x < width; x += 1) {
+            const elevation = fractalNoise(x / scale, y / scale, seed, octaves);
+            const dx = x / (width - 1) - 0.5;
+            const dy = y / (height - 1) - 0.5;
+            const islandValue = elevation - Math.sqrt(dx * dx + dy * dy) * 0.9;
+            if (islandValue < waterLevel / 100) row.push("water");
+            else if (islandValue < waterLevel / 100 + 0.06) row.push("sand");
+            else if (islandValue < 0.42) row.push("grass");
+            else if (islandValue < 0.56) row.push("hill");
+            else row.push("rock");
+          }
+          tiles.push(row);
+        }
+
+        return {
+          version: "1.0",
+          algorithm: "noise-terrain",
+          seed,
+          space: { mode: "grid", width, height, cellSize: 10 },
+          tiles,
+          metadata: { scale, octaves, waterLevel }
+        };
+      }
+
+      function renderEnvironment(environment) {
+        const colors = { water: "#3a78b9", sand: "#d8bf7a", grass: "#7cad62", hill: "#9c8c60", rock: "#7f8a91" };
+        const cellSize = environment.space.cellSize;
+        canvas.width = environment.space.width * cellSize;
+        canvas.height = environment.space.height * cellSize;
+        const ctx = canvas.getContext("2d");
+        for (let y = 0; y < environment.tiles.length; y += 1) {
+          for (let x = 0; x < environment.tiles[y].length; x += 1) {
+            ctx.fillStyle = colors[environment.tiles[y][x]];
+            ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+          }
+        }
+      }
+
+      function downloadJson(environment) {
+        const blob = new Blob([`${JSON.stringify(environment, null, 2)}\n`], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "08-noise-terrain-sample-output.json";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+
+      function update() {
+        const environment = generateEnvironment(
+          Number(document.getElementById("seed").value),
+          Number(document.getElementById("width").value),
+          Number(document.getElementById("height").value),
+          Number(document.getElementById("scale").value),
+          Number(document.getElementById("octaves").value),
+          Number(document.getElementById("waterLevel").value)
+        );
+        renderEnvironment(environment);
+        stats.textContent = `Noise scale: ${environment.metadata.scale}, octaves: ${environment.metadata.octaves}.`;
+        output.textContent = JSON.stringify(environment, null, 2);
+        return environment;
+      }
+
+      let currentEnvironment = update();
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        currentEnvironment = update();
+      });
+      exportButton.addEventListener("click", () => downloadJson(currentEnvironment));
+    </script>
+  </body>
+</html>
