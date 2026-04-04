@@ -22,17 +22,18 @@
           <h1>Rectangle Packing Rooms</h1>
           <p class="summary">Non-overlapping rectangles give you a set of room footprints.</p>
           <p class="summary" id="stats"></p>
+            <p class="summary" id="message"></p>
           <canvas id="map"></canvas>
         </article>
         <aside class="panel">
           <form id="controls">
             <div class="control-grid">
-                <div class="field"><label for="seed">Seed</label><input id="seed" type="number" value="512" step="1" /></div>
-                <div class="field"><label for="width">World Width</label><input id="width" type="number" value="100" min="8" step="1" /></div>
-                <div class="field"><label for="height">World Height</label><input id="height" type="number" value="72" min="8" step="1" /></div>
-                <div class="field"><label for="roomCount">Rooms</label><input id="roomCount" type="number" value="12" min="1" step="1" /></div>
-                <div class="field"><label for="minRoomSize">Min Room Size</label><input id="minRoomSize" type="number" value="8" min="1" step="1" /></div>
-                <div class="field"><label for="maxRoomSize">Max Room Size</label><input id="maxRoomSize" type="number" value="16" min="1" step="1" /></div>
+              <div class="field"><label for="seed">Seed</label><input id="seed" type="number" value="512" step="1" /></div>
+              <div class="field"><label for="width">World Width</label><input id="width" type="number" value="100" step="1" /></div>
+              <div class="field"><label for="height">World Height</label><input id="height" type="number" value="72" step="1" /></div>
+              <div class="field"><label for="roomCount">Rooms</label><input id="roomCount" type="number" value="12" step="1" /></div>
+              <div class="field"><label for="minRoomSize">Min Room Size</label><input id="minRoomSize" type="number" value="8" step="1" /></div>
+              <div class="field"><label for="maxRoomSize">Max Room Size</label><input id="maxRoomSize" type="number" value="16" step="1" /></div>
             </div>
             <div class="button-row">
               <button type="submit">Generate</button>
@@ -51,7 +52,15 @@
       const form = document.getElementById("controls");
       const output = document.getElementById("output");
       const stats = document.getElementById("stats");
+      const message = document.getElementById("message");
       const exportButton = document.getElementById("export-json");
+
+      function readInteger(id, label, minimum = null) {
+        const value = Number(document.getElementById(id).value);
+        if (!Number.isInteger(value)) throw new Error(`${label} must be a whole number.`);
+        if (minimum !== null && value < minimum) throw new Error(`${label} must be at least ${minimum}.`);
+        return value;
+      }
 
       function createRng(seed) {
         let state = (Number(seed) >>> 0) || 1;
@@ -176,18 +185,26 @@
       }
 
       function update() {
-        const environment = generateEnvironment(
-          Number(document.getElementById("seed").value),
-          Number(document.getElementById("width").value),
-          Number(document.getElementById("height").value),
-          Number(document.getElementById("roomCount").value),
-          Number(document.getElementById("minRoomSize").value),
-          Number(document.getElementById("maxRoomSize").value)
-        );
-        renderEnvironment(environment);
-        stats.textContent = `Placed rooms: ${environment.metadata.roomCount} after ${environment.metadata.attempts} attempts.`;
-        output.textContent = JSON.stringify(environment, null, 2);
-        return environment;
+        try {
+          const seed = readInteger("seed", "Seed");
+          const width = readInteger("width", "World width", 1);
+          const height = readInteger("height", "World height", 1);
+          const roomCount = readInteger("roomCount", "Rooms", 1);
+          const minRoomSize = readInteger("minRoomSize", "Min room size", 1);
+          const maxRoomSize = readInteger("maxRoomSize", "Max room size", 1);
+          if (maxRoomSize < minRoomSize) throw new Error("Max room size must be at least the min room size.");
+          if (width < maxRoomSize) throw new Error("World width must be at least the max room size.");
+          if (height < maxRoomSize) throw new Error("World height must be at least the max room size.");
+          const environment = generateEnvironment(seed, width, height, roomCount, minRoomSize, maxRoomSize);
+          renderEnvironment(environment);
+          stats.textContent = `Placed rooms: ${environment.metadata.roomCount} after ${environment.metadata.attempts} attempts.`;
+          message.textContent = "";
+          output.textContent = JSON.stringify(environment, null, 2);
+          return environment;
+        } catch (error) {
+          message.textContent = error.message;
+          return currentEnvironment;
+        }
       }
 
       let currentEnvironment = update();

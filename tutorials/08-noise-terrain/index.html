@@ -22,17 +22,18 @@
           <h1>Noise Terrain Map</h1>
           <p class="summary">Layered value noise turns a grid into sea, coast, plains, hills, and mountains.</p>
           <p class="summary" id="stats"></p>
+            <p class="summary" id="message"></p>
           <canvas id="map"></canvas>
         </article>
         <aside class="panel">
           <form id="controls">
             <div class="control-grid">
-                <div class="field"><label for="seed">Seed</label><input id="seed" type="number" value="4096" step="1" /></div>
-                <div class="field"><label for="width">Width</label><input id="width" type="number" value="72" min="2" step="1" /></div>
-                <div class="field"><label for="height">Height</label><input id="height" type="number" value="48" min="2" step="1" /></div>
-                <div class="field"><label for="scale">Noise Scale</label><input id="scale" type="number" value="18" min="1" step="1" /></div>
-                <div class="field"><label for="octaves">Octaves</label><input id="octaves" type="number" value="4" min="1" step="1" /></div>
-                <div class="field"><label for="waterLevel">Water Level %</label><input id="waterLevel" type="number" value="18" min="0" max="100" step="1" /></div>
+              <div class="field"><label for="seed">Seed</label><input id="seed" type="number" value="4096" step="1" /></div>
+              <div class="field"><label for="width">Width</label><input id="width" type="number" value="72" step="1" /></div>
+              <div class="field"><label for="height">Height</label><input id="height" type="number" value="48" step="1" /></div>
+              <div class="field"><label for="scale">Noise Scale</label><input id="scale" type="number" value="18" step="1" /></div>
+              <div class="field"><label for="octaves">Octaves</label><input id="octaves" type="number" value="4" step="1" /></div>
+              <div class="field"><label for="waterLevel">Water Level %</label><input id="waterLevel" type="number" value="18" step="1" /></div>
             </div>
             <div class="button-row">
               <button type="submit">Generate</button>
@@ -51,7 +52,22 @@
       const form = document.getElementById("controls");
       const output = document.getElementById("output");
       const stats = document.getElementById("stats");
+      const message = document.getElementById("message");
       const exportButton = document.getElementById("export-json");
+
+      function readInteger(id, label, minimum = null) {
+        const value = Number(document.getElementById(id).value);
+        if (!Number.isInteger(value)) throw new Error(`${label} must be a whole number.`);
+        if (minimum !== null && value < minimum) throw new Error(`${label} must be at least ${minimum}.`);
+        return value;
+      }
+
+      function readPercent(id, label) {
+        const value = Number(document.getElementById(id).value);
+        if (!Number.isFinite(value)) throw new Error(`${label} must be a number.`);
+        if (value < 0 || value > 100) throw new Error(`${label} must be between 0 and 100.`);
+        return value;
+      }
 
       function hash2d(x, y, seed) {
         const value = Math.sin(x * 127.1 + y * 311.7 + seed * 74.7) * 43758.5453123;
@@ -147,18 +163,24 @@
       }
 
       function update() {
-        const environment = generateEnvironment(
-          Number(document.getElementById("seed").value),
-          Number(document.getElementById("width").value),
-          Number(document.getElementById("height").value),
-          Number(document.getElementById("scale").value),
-          Number(document.getElementById("octaves").value),
-          Number(document.getElementById("waterLevel").value)
-        );
-        renderEnvironment(environment);
-        stats.textContent = `Noise scale: ${environment.metadata.scale}, octaves: ${environment.metadata.octaves}.`;
-        output.textContent = JSON.stringify(environment, null, 2);
-        return environment;
+        try {
+          const environment = generateEnvironment(
+            readInteger("seed", "Seed"),
+            readInteger("width", "Width", 2),
+            readInteger("height", "Height", 2),
+            readInteger("scale", "Noise scale", 1),
+            readInteger("octaves", "Octaves", 1),
+            readPercent("waterLevel", "Water level")
+          );
+          renderEnvironment(environment);
+          stats.textContent = `Noise scale: ${environment.metadata.scale}, octaves: ${environment.metadata.octaves}.`;
+          message.textContent = "";
+          output.textContent = JSON.stringify(environment, null, 2);
+          return environment;
+        } catch (error) {
+          message.textContent = error.message;
+          return currentEnvironment;
+        }
       }
 
       let currentEnvironment = update();

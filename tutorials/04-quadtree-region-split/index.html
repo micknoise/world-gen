@@ -22,16 +22,17 @@
           <h1>Quadtree Region Split</h1>
           <p class="summary">A world rectangle is recursively quartered into smaller sectors.</p>
           <p class="summary" id="stats"></p>
+            <p class="summary" id="message"></p>
           <canvas id="map"></canvas>
         </article>
         <aside class="panel">
           <form id="controls">
             <div class="control-grid">
-                <div class="field"><label for="seed">Seed</label><input id="seed" type="number" value="256" step="1" /></div>
-                <div class="field"><label for="width">World Width</label><input id="width" type="number" value="100" min="12" step="1" /></div>
-                <div class="field"><label for="height">World Height</label><input id="height" type="number" value="80" min="12" step="1" /></div>
-                <div class="field"><label for="maxDepth">Max Depth</label><input id="maxDepth" type="number" value="3" min="1" step="1" /></div>
-                <div class="field"><label for="splitChance">Split %</label><input id="splitChance" type="number" value="78" min="0" max="100" step="1" /></div>
+              <div class="field"><label for="seed">Seed</label><input id="seed" type="number" value="256" step="1" /></div>
+              <div class="field"><label for="width">World Width</label><input id="width" type="number" value="100" step="1" /></div>
+              <div class="field"><label for="height">World Height</label><input id="height" type="number" value="80" step="1" /></div>
+              <div class="field"><label for="maxDepth">Max Depth</label><input id="maxDepth" type="number" value="3" step="1" /></div>
+              <div class="field"><label for="splitChance">Split %</label><input id="splitChance" type="number" value="78" step="1" /></div>
             </div>
             <div class="button-row">
               <button type="submit">Generate</button>
@@ -50,7 +51,22 @@
       const form = document.getElementById("controls");
       const output = document.getElementById("output");
       const stats = document.getElementById("stats");
+      const message = document.getElementById("message");
       const exportButton = document.getElementById("export-json");
+
+      function readInteger(id, label, minimum = null) {
+        const value = Number(document.getElementById(id).value);
+        if (!Number.isInteger(value)) throw new Error(`${label} must be a whole number.`);
+        if (minimum !== null && value < minimum) throw new Error(`${label} must be at least ${minimum}.`);
+        return value;
+      }
+
+      function readPercent(id, label) {
+        const value = Number(document.getElementById(id).value);
+        if (!Number.isFinite(value)) throw new Error(`${label} must be a number.`);
+        if (value < 0 || value > 100) throw new Error(`${label} must be between 0 and 100.`);
+        return value;
+      }
 
       function createRng(seed) {
         let state = (Number(seed) >>> 0) || 1;
@@ -142,17 +158,23 @@
       }
 
       function update() {
-        const environment = generateEnvironment(
-          Number(document.getElementById("seed").value),
-          Number(document.getElementById("width").value),
-          Number(document.getElementById("height").value),
-          Number(document.getElementById("maxDepth").value),
-          Number(document.getElementById("splitChance").value)
-        );
-        renderEnvironment(environment);
-        stats.textContent = `Leaf regions: ${environment.metadata.regionCount}.`;
-        output.textContent = JSON.stringify(environment, null, 2);
-        return environment;
+        try {
+          const environment = generateEnvironment(
+            readInteger("seed", "Seed"),
+            readInteger("width", "World width", 12),
+            readInteger("height", "World height", 12),
+            readInteger("maxDepth", "Max depth", 1),
+            readPercent("splitChance", "Split percentage")
+          );
+          renderEnvironment(environment);
+          stats.textContent = `Leaf regions: ${environment.metadata.regionCount}.`;
+          message.textContent = "";
+          output.textContent = JSON.stringify(environment, null, 2);
+          return environment;
+        } catch (error) {
+          message.textContent = error.message;
+          return currentEnvironment;
+        }
       }
 
       let currentEnvironment = update();

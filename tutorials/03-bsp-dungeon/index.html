@@ -22,16 +22,17 @@
           <h1>BSP Dungeon</h1>
           <p class="summary">Recursive partitioning makes room slots first, then connects them.</p>
           <p class="summary" id="stats"></p>
+            <p class="summary" id="message"></p>
           <canvas id="map"></canvas>
         </article>
         <aside class="panel">
           <form id="controls">
             <div class="control-grid">
-                <div class="field"><label for="seed">Seed</label><input id="seed" type="number" value="126" step="1" /></div>
-                <div class="field"><label for="width">Width</label><input id="width" type="number" value="56" min="12" step="1" /></div>
-                <div class="field"><label for="height">Height</label><input id="height" type="number" value="40" min="12" step="1" /></div>
-                <div class="field"><label for="minLeafSize">Min Leaf Size</label><input id="minLeafSize" type="number" value="10" min="4" step="1" /></div>
-                <div class="field"><label for="maxDepth">Max Depth</label><input id="maxDepth" type="number" value="4" min="1" step="1" /></div>
+              <div class="field"><label for="seed">Seed</label><input id="seed" type="number" value="126" step="1" /></div>
+              <div class="field"><label for="width">Width</label><input id="width" type="number" value="56" step="1" /></div>
+              <div class="field"><label for="height">Height</label><input id="height" type="number" value="40" step="1" /></div>
+              <div class="field"><label for="minLeafSize">Min Leaf Size</label><input id="minLeafSize" type="number" value="10" step="1" /></div>
+              <div class="field"><label for="maxDepth">Max Depth</label><input id="maxDepth" type="number" value="4" step="1" /></div>
             </div>
             <div class="button-row">
               <button type="submit">Generate</button>
@@ -50,7 +51,15 @@
       const form = document.getElementById("controls");
       const output = document.getElementById("output");
       const stats = document.getElementById("stats");
+      const message = document.getElementById("message");
       const exportButton = document.getElementById("export-json");
+
+      function readInteger(id, label, minimum = null) {
+        const value = Number(document.getElementById(id).value);
+        if (!Number.isInteger(value)) throw new Error(`${label} must be a whole number.`);
+        if (minimum !== null && value < minimum) throw new Error(`${label} must be at least ${minimum}.`);
+        return value;
+      }
 
       function createRng(seed) {
         let state = (Number(seed) >>> 0) || 1;
@@ -246,17 +255,24 @@
       }
 
       function update() {
-        const environment = generateEnvironment(
-          Number(document.getElementById("seed").value),
-          Number(document.getElementById("width").value),
-          Number(document.getElementById("height").value),
-          Number(document.getElementById("minLeafSize").value),
-          Number(document.getElementById("maxDepth").value)
-        );
-        renderEnvironment(environment);
-        stats.textContent = `Rooms: ${environment.metadata.roomCount}, corridors: ${environment.metadata.corridorCount}.`;
-        output.textContent = JSON.stringify(environment, null, 2);
-        return environment;
+        try {
+          const seed = readInteger("seed", "Seed");
+          const width = readInteger("width", "Width", 12);
+          const height = readInteger("height", "Height", 12);
+          const minLeafSize = readInteger("minLeafSize", "Min leaf size", 4);
+          const maxDepth = readInteger("maxDepth", "Max depth", 1);
+          if (width < minLeafSize * 2 + 2) throw new Error("Width must be large enough for the chosen leaf size.");
+          if (height < minLeafSize * 2 + 2) throw new Error("Height must be large enough for the chosen leaf size.");
+          const environment = generateEnvironment(seed, width, height, minLeafSize, maxDepth);
+          renderEnvironment(environment);
+          stats.textContent = `Rooms: ${environment.metadata.roomCount}, corridors: ${environment.metadata.corridorCount}.`;
+          message.textContent = "";
+          output.textContent = JSON.stringify(environment, null, 2);
+          return environment;
+        } catch (error) {
+          message.textContent = error.message;
+          return currentEnvironment;
+        }
       }
 
       let currentEnvironment = update();
