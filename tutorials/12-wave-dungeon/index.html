@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Wave Dungeon</title>
+    <link rel="stylesheet" href="../../styles.css" />
+  </head>
+  <body>
+    <main class="tutorial-page">
+      <a class="back-link" href="../../index.html">Back to tutorials</a>
+      <section class="tutorial-copy">
+        <h2>What this shows</h2>
+        <p>Plane waves at random angles and frequencies are superimposed. Where many waves constructively interfere, they form bright crests — those crests become the floor. No noise function is used at all: every room and corridor emerges from pure trigonometry.</p>
+        <ul class="meta-list">
+          <li><strong>Good for:</strong> sci-fi facilities, arcane or crystalline spaces, circuit-board-like layouts</li>
+          <li><strong>Watch for:</strong> fewer waves produce bold regular patterns; more waves produce complex irregular rooms</li>
+        </ul>
+      </section>
+      <section class="tutorial-shell">
+        <article class="panel canvas-panel">
+          <h1>Wave Dungeon</h1>
+          <p class="summary">Constructive interference between random plane waves forms rooms and passages.</p>
+          <canvas id="map"></canvas>
+        </article>
+        <aside class="panel">
+          <form id="controls">
+            <div class="control-grid">
+              <div class="field"><label for="seed">Seed</label><input id="seed" type="number" value="3" /></div>
+              <div class="field"><label for="width">Width</label><input id="width" type="number" value="80" /></div>
+              <div class="field"><label for="height">Height</label><input id="height" type="number" value="56" /></div>
+              <div class="field"><label for="waves">Wave Sources</label><input id="waves" type="number" value="6" /></div>
+              <div class="field"><label for="minFreq">Min Frequency</label><input id="minFreq" type="number" value="4" step="1" /></div>
+              <div class="field"><label for="maxFreq">Max Frequency</label><input id="maxFreq" type="number" value="14" step="1" /></div>
+              <div class="field"><label for="threshold">Threshold %</label><input id="threshold" type="number" value="62" /></div>
+            </div>
+            <div class="button-row">
+              <button type="submit">Generate</button>
+            </div>
+          </form>
+        </aside>
+      </section>
+    </main>
+    <script>
+      const canvas = document.getElementById('map');
+
+      const rng = (i, seed) => { const v = Math.sin(i * 127.1 + seed * 311.7) * 43758.5453; return v - Math.floor(v); };
+
+      function waveField(x, y, waves, minFreq, maxFreq, seed) {
+        let sum = 0;
+        const freqRange = Math.max(0, maxFreq - minFreq);
+        for (let i = 0; i < waves; i++) {
+          const angle = rng(i * 3,     seed) * Math.PI * 2;
+          const freq  = (rng(i * 3 + 1, seed) * freqRange + minFreq) * 0.02;
+          const phase = rng(i * 3 + 2, seed) * Math.PI * 2;
+          sum += Math.cos(x * Math.cos(angle) * freq + y * Math.sin(angle) * freq + phase);
+        }
+        return (sum / waves + 1) * 0.5; // normalise to [0, 1]
+      }
+
+      function draw() {
+        const seed    = +document.getElementById('seed').value;
+        const W       = Math.max(4, +document.getElementById('width').value | 0);
+        const H       = Math.max(4, +document.getElementById('height').value | 0);
+        const waves   = Math.max(1, Math.min(32, +document.getElementById('waves').value | 0));
+        const minFreq = +document.getElementById('minFreq').value;
+        const maxFreq = +document.getElementById('maxFreq').value;
+        const thresh  = +document.getElementById('threshold').value / 100;
+        const cell = 8;
+        canvas.width = W * cell; canvas.height = H * cell;
+        const ctx = canvas.getContext('2d');
+
+        for (let y = 0; y < H; y++) {
+          for (let x = 0; x < W; x++) {
+            const v = waveField(x, y, waves, minFreq, maxFreq, seed);
+            ctx.fillStyle = v > thresh ? '#8ab4d4' : '#1c1228';
+            ctx.fillRect(x * cell, y * cell, cell, cell);
+          }
+        }
+      }
+
+      draw();
+      document.getElementById('controls').addEventListener('submit', e => { e.preventDefault(); draw(); });
+    </script>
+  </body>
+</html>

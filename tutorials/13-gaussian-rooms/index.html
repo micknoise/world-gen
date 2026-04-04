@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gaussian Rooms</title>
+    <link rel="stylesheet" href="../../styles.css" />
+  </head>
+  <body>
+    <main class="tutorial-page">
+      <a class="back-link" href="../../index.html">Back to tutorials</a>
+      <section class="tutorial-copy">
+        <h2>What this shows</h2>
+        <p>Each room is a Gaussian probability density — a smooth bell curve centred on a random point. The density values from all rooms are summed at every pixel. Where neighbouring rooms are close, their Gaussians overlap and naturally merge, forming corridors without any explicit connection logic.</p>
+        <ul class="meta-list">
+          <li><strong>Good for:</strong> organic settlements, alien hives, fungal colonies, interconnected cavern clusters</li>
+          <li><strong>Watch for:</strong> increase spread to merge rooms together; decrease it for isolated, distinct rooms</li>
+        </ul>
+      </section>
+      <section class="tutorial-shell">
+        <article class="panel canvas-panel">
+          <h1>Gaussian Rooms</h1>
+          <p class="summary">Bell curve density fields overlap and merge to form rooms and passages.</p>
+          <canvas id="map"></canvas>
+        </article>
+        <aside class="panel">
+          <form id="controls">
+            <div class="control-grid">
+              <div class="field"><label for="seed">Seed</label><input id="seed" type="number" value="11" /></div>
+              <div class="field"><label for="width">Width</label><input id="width" type="number" value="80" /></div>
+              <div class="field"><label for="height">Height</label><input id="height" type="number" value="56" /></div>
+              <div class="field"><label for="rooms">Rooms</label><input id="rooms" type="number" value="12" /></div>
+              <div class="field"><label for="spread">Spread</label><input id="spread" type="number" value="9" /></div>
+              <div class="field"><label for="threshold">Threshold %</label><input id="threshold" type="number" value="18" /></div>
+            </div>
+            <div class="button-row">
+              <button type="submit">Generate</button>
+            </div>
+          </form>
+        </aside>
+      </section>
+    </main>
+    <script>
+      const canvas = document.getElementById('map');
+
+      const rng = (i, seed) => { const v = Math.sin(i * 127.1 + seed * 311.7) * 43758.5453; return v - Math.floor(v); };
+
+      function draw() {
+        const seed   = +document.getElementById('seed').value;
+        const W      = Math.max(4, +document.getElementById('width').value | 0);
+        const H      = Math.max(4, +document.getElementById('height').value | 0);
+        const count  = Math.max(1, Math.min(64, +document.getElementById('rooms').value | 0));
+        const spread = Math.max(1, +document.getElementById('spread').value);
+        const thresh = +document.getElementById('threshold').value / 100;
+        const cell = 8;
+        canvas.width = W * cell; canvas.height = H * cell;
+        const ctx = canvas.getContext('2d');
+
+        const rooms = Array.from({ length: count }, (_, i) => ({
+          x: rng(i*3,   seed) * W,
+          y: rng(i*3+1, seed) * H,
+          s: rng(i*3+2, seed) * spread * 0.8 + spread * 0.5   // vary each room's spread a little
+        }));
+
+        for (let y = 0; y < H; y++) {
+          for (let x = 0; x < W; x++) {
+            // Sum of Gaussians: each room contributes exp(-d² / 2σ²)
+            let density = 0;
+            for (const r of rooms) {
+              const d2 = (x - r.x) ** 2 + (y - r.y) ** 2;
+              density += Math.exp(-d2 / (2 * r.s * r.s));
+            }
+            // Shade by density for a smooth gradient floor
+            if (density > thresh) {
+              const brightness = Math.min(1, (density - thresh) / thresh);
+              const f = Math.round(180 + brightness * 40);
+              const w = Math.round(160 + brightness * 20);
+              ctx.fillStyle = `rgb(${f},${w},${Math.round(w * 0.85)})`;
+            } else {
+              ctx.fillStyle = '#141a1f';
+            }
+            ctx.fillRect(x * cell, y * cell, cell, cell);
+          }
+        }
+      }
+
+      draw();
+      document.getElementById('controls').addEventListener('submit', e => { e.preventDefault(); draw(); });
+    </script>
+  </body>
+</html>

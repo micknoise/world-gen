@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SDF Rooms</title>
+    <link rel="stylesheet" href="../../styles.css" />
+  </head>
+  <body>
+    <main class="tutorial-page">
+      <a class="back-link" href="../../index.html">Back to tutorials</a>
+      <section class="tutorial-copy">
+        <h2>What this shows</h2>
+        <p>Rooms are circles, corridors are capsules (fattened line segments). Every pixel is tested against all shapes simultaneously using signed distance functions, then merged with a smooth-minimum that rounds the joints where shapes meet.</p>
+        <ul class="meta-list">
+          <li><strong>Good for:</strong> architectural dungeons, lab complexes, structured floorplans with organic joins</li>
+          <li><strong>Watch for:</strong> increase smoothing for rounded blob-like merges; reduce it for sharp, distinct rooms</li>
+        </ul>
+      </section>
+      <section class="tutorial-shell">
+        <article class="panel canvas-panel">
+          <h1>SDF Rooms</h1>
+          <p class="summary">Circles and capsules defined as distance functions, merged into a floorplan.</p>
+          <canvas id="map"></canvas>
+        </article>
+        <aside class="panel">
+          <form id="controls">
+            <div class="control-grid">
+              <div class="field"><label for="seed">Seed</label><input id="seed" type="number" value="7" /></div>
+              <div class="field"><label for="width">Width</label><input id="width" type="number" value="80" /></div>
+              <div class="field"><label for="height">Height</label><input id="height" type="number" value="56" /></div>
+              <div class="field"><label for="rooms">Rooms</label><input id="rooms" type="number" value="9" /></div>
+              <div class="field"><label for="corridor">Corridor Width</label><input id="corridor" type="number" value="5" /></div>
+              <div class="field"><label for="smooth">Smoothing</label><input id="smooth" type="number" value="10" /></div>
+            </div>
+            <div class="button-row">
+              <button type="submit">Generate</button>
+            </div>
+          </form>
+        </aside>
+      </section>
+    </main>
+    <script>
+      const canvas = document.getElementById('map');
+
+      const rng = (i, seed) => { const v = Math.sin(i * 127.1 + seed * 311.7) * 43758.5453; return v - Math.floor(v); };
+
+      const sdCircle  = (px, py, cx, cy, r) => Math.hypot(px - cx, py - cy) - r;
+
+      function sdCapsule(px, py, ax, ay, bx, by, r) {
+        const dx = bx - ax, dy = by - ay;
+        const t = Math.max(0, Math.min(1, ((px-ax)*dx + (py-ay)*dy) / (dx*dx + dy*dy)));
+        return Math.hypot(px - ax - t*dx, py - ay - t*dy) - r;
+      }
+
+      function smin(a, b, k) {
+        const h = Math.max(k - Math.abs(a - b), 0) / k;
+        return Math.min(a, b) - h * h * k / 4;
+      }
+
+      function draw() {
+        const seed   = +document.getElementById('seed').value;
+        const W      = Math.max(4, +document.getElementById('width').value | 0);
+        const H      = Math.max(4, +document.getElementById('height').value | 0);
+        const count  = Math.max(2, Math.min(24, +document.getElementById('rooms').value | 0));
+        const corrW  = Math.max(1, +document.getElementById('corridor').value);
+        const k      = Math.max(0.1, +document.getElementById('smooth').value);
+        const cell = 8;
+        canvas.width = W * cell; canvas.height = H * cell;
+        const ctx = canvas.getContext('2d');
+
+        const rooms = Array.from({ length: count }, (_, i) => ({
+          x: rng(i*3,   seed) * W * 0.8 + W * 0.1,
+          y: rng(i*3+1, seed) * H * 0.8 + H * 0.1,
+          r: rng(i*3+2, seed) * 10 + 7
+        }));
+
+        // Each room connects to its single nearest neighbour
+        const corridors = rooms.map((a, i) => {
+          let best = -1, bestDist = Infinity;
+          rooms.forEach((b, j) => {
+            if (i === j) return;
+            const d = Math.hypot(a.x - b.x, a.y - b.y);
+            if (d < bestDist) { bestDist = d; best = j; }
+          });
+          return { a, b: rooms[best] };
+        });
+
+        for (let y = 0; y < H; y++) {
+          for (let x = 0; x < W; x++) {
+            let d = Infinity;
+            for (const rm of rooms)     d = smin(d, sdCircle(x, y, rm.x, rm.y, rm.r), k);
+            for (const c of corridors)  d = smin(d, sdCapsule(x, y, c.a.x, c.a.y, c.b.x, c.b.y, corrW), k);
+
+            ctx.fillStyle = d < 0 ? '#c8b89a' : d < 2.5 ? '#3a3022' : '#161b22';
+            ctx.fillRect(x * cell, y * cell, cell, cell);
+          }
+        }
+      }
+
+      draw();
+      document.getElementById('controls').addEventListener('submit', e => { e.preventDefault(); draw(); });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ridge Dungeon</title>
+    <link rel="stylesheet" href="../../styles.css" />
+  </head>
+  <body>
+    <main class="tutorial-page">
+      <a class="back-link" href="../../index.html">Back to tutorials</a>
+      <section class="tutorial-copy">
+        <h2>What this shows</h2>
+        <p>Ridged fractal noise converts the crest lines of stacked noise waves into a branching network of passages. Each octave adds finer branching detail. Threshold controls how wide the passages grow.</p>
+        <ul class="meta-list">
+          <li><strong>Good for:</strong> cave networks, mine tunnels, dungeon corridors, underground rivers</li>
+          <li><strong>Watch for:</strong> raise threshold to narrow passages; lower it to widen them into chambers</li>
+        </ul>
+      </section>
+      <section class="tutorial-shell">
+        <article class="panel canvas-panel">
+          <h1>Ridge Dungeon</h1>
+          <p class="summary">The crest lines of layered noise become a branching corridor network.</p>
+          <canvas id="map"></canvas>
+        </article>
+        <aside class="panel">
+          <form id="controls">
+            <div class="control-grid">
+              <div class="field"><label for="seed">Seed</label><input id="seed" type="number" value="42" /></div>
+              <div class="field"><label for="width">Width</label><input id="width" type="number" value="80" /></div>
+              <div class="field"><label for="height">Height</label><input id="height" type="number" value="56" /></div>
+              <div class="field"><label for="scale">Scale</label><input id="scale" type="number" value="14" /></div>
+              <div class="field"><label for="octaves">Octaves</label><input id="octaves" type="number" value="5" /></div>
+              <div class="field"><label for="threshold">Threshold %</label><input id="threshold" type="number" value="58" /></div>
+            </div>
+            <div class="button-row">
+              <button type="submit">Generate</button>
+            </div>
+          </form>
+        </aside>
+      </section>
+    </main>
+    <script>
+      const canvas = document.getElementById('map');
+
+      function vnoise(x, y, seed) {
+        const xi = Math.floor(x), yi = Math.floor(y);
+        const tx = x - xi, ty = y - yi;
+        const sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+        const h = (a, b) => { const v = Math.sin(a * 127.1 + b * 311.7 + seed * 74.7) * 43758.5453; return v - Math.floor(v); };
+        const n00 = h(xi, yi), n10 = h(xi+1, yi), n01 = h(xi, yi+1), n11 = h(xi+1, yi+1);
+        return n00 + (n10-n00)*sx + (n01-n00)*sy + (n00-n10-n01+n11)*sx*sy;
+      }
+
+      function ridgedFbm(x, y, seed, octaves) {
+        let v = 0, amp = 1, freq = 1, total = 0;
+        for (let i = 0; i < octaves; i++) {
+          v += (1 - Math.abs(vnoise(x * freq, y * freq, seed + i * 17) * 2 - 1)) * amp;
+          total += amp; amp *= 0.5; freq *= 2;
+        }
+        return v / total;
+      }
+
+      function draw() {
+        const seed    = +document.getElementById('seed').value;
+        const W       = Math.max(4, +document.getElementById('width').value | 0);
+        const H       = Math.max(4, +document.getElementById('height').value | 0);
+        const scale   = Math.max(1, +document.getElementById('scale').value);
+        const octaves = Math.max(1, Math.min(8, +document.getElementById('octaves').value | 0));
+        const thresh  = +document.getElementById('threshold').value / 100;
+        const cell = 8;
+        canvas.width = W * cell; canvas.height = H * cell;
+        const ctx = canvas.getContext('2d');
+
+        for (let y = 0; y < H; y++) {
+          for (let x = 0; x < W; x++) {
+            const v = ridgedFbm(x / scale, y / scale, seed, octaves);
+            ctx.fillStyle = v > thresh ? '#d4c9a8' : '#1a1f24';
+            ctx.fillRect(x * cell, y * cell, cell, cell);
+          }
+        }
+      }
+
+      draw();
+      document.getElementById('controls').addEventListener('submit', e => { e.preventDefault(); draw(); });
+    </script>
+  </body>
+</html>
