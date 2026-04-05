@@ -60,7 +60,8 @@
         <pre id="output"></pre>
       </section>
     </main>
-    <script>
+    <script type="module">
+      import { initTutorial } from '../../shared/tutorial-runtime.js';
       const canvas = document.getElementById('map');
       const output = document.getElementById('output');
       const stats = document.getElementById('stats');
@@ -141,33 +142,21 @@
         output.textContent = JSON.stringify(currentEnvironment, null, 2);
       }
 
-      update();
-      document.getElementById('controls').addEventListener('submit', e => { e.preventDefault(); update(); });
-      exportButton.addEventListener('click', () => downloadJson(currentEnvironment));
-
-      // ── 3D view ──────────────────────────────────────────────────────────────
-      const aframeEl = document.getElementById('aframe-container');
-      const btn3d = document.getElementById('btn-3d');
-      const selMode = document.getElementById('sel-mode');
-      let is3d = false;
-
-      function render3d() {
-        const W = Math.max(4, +document.getElementById('width').value | 0);
-        const H = Math.max(4, +document.getElementById('height').value | 0);
-        const thresh = +document.getElementById('threshold').value / 100;
-        AFrameRenderer.renderContinuousField(getFieldFn(), W, H, thresh, aframeEl, { mode: selMode.value });
-      }
-
-      btn3d.addEventListener('click', () => {
-        is3d = !is3d;
-        btn3d.textContent = is3d ? 'View in 2D' : 'View in 3D';
-        btn3d.classList.toggle('active', is3d);
-        aframeEl.style.display = is3d ? 'block' : 'none';
-        selMode.style.display = is3d ? 'inline-block' : 'none';
-        if (is3d) render3d(); else AFrameRenderer.destroyScene(aframeEl);
+      initTutorial({
+        name: '09-ridge-dungeon',
+        canvas,
+        controls: document.getElementById('controls'),
+        aframeEl: document.getElementById('aframe-container'),
+        btn3d: document.getElementById('btn-3d'),
+        selMode: document.getElementById('sel-mode'),
+        output,
+        stats,
+        message,
+        exportButton,
+        buildEnvironment,
+        draw,
+        getFieldFn
       });
-      selMode.addEventListener('change', () => { if (is3d) render3d(); });
-      document.getElementById('controls').addEventListener('submit', () => { if (is3d) render3d(); });
     </script>
   </body>
 </html>
