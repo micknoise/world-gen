@@ -24,6 +24,8 @@
         <article class="panel canvas-panel">
           <h1>Gaussian Rooms</h1>
           <p class="summary">Bell curve density fields overlap and merge to form rooms and passages.</p>
+          <p class="summary" id="stats"></p>
+          <p class="summary" id="message"></p>
           <canvas id="map"></canvas>
         </article>
         <aside class="panel">
@@ -38,6 +40,7 @@
             </div>
             <div class="button-row">
               <button type="submit">Generate</button>
+              <button class="secondary" type="button" id="export-json">Export JSON</button>
             </div>
           </form>
         </aside>
@@ -52,9 +55,17 @@
       <div class="aframe-panel" id="aframe-container" style="display:none">
         <div class="aframe-hint">Click scene to capture cursor · WASD to move · Esc to release</div>
       </div>
+      <section class="json-panel">
+        <h2>Environment JSON</h2>
+        <pre id="output"></pre>
+      </section>
     </main>
     <script>
       const canvas = document.getElementById('map');
+      const output = document.getElementById('output');
+      const stats = document.getElementById('stats');
+      const message = document.getElementById('message');
+      const exportButton = document.getElementById('export-json');
 
       const rng = (i, seed) => { const v = Math.sin(i * 127.1 + seed * 311.7) * 43758.5453; return v - Math.floor(v); };
 
@@ -112,8 +123,39 @@
         };
       }
 
-      draw();
-      document.getElementById('controls').addEventListener('submit', e => { e.preventDefault(); draw(); });
+      function buildEnvironment() {
+        const { W, H, rooms } = buildRooms();
+        const thresh = +document.getElementById('threshold').value / 100;
+        const seed   = +document.getElementById('seed').value;
+        const fieldFn = getFieldFn();
+        const tiles = Array.from({ length: H }, (_, y) =>
+          Array.from({ length: W }, (_, x) => fieldFn(x, y) > thresh ? 'floor' : 'wall')
+        );
+        return { version: '1.0', algorithm: 'gaussian-rooms', seed, space: { mode: 'grid', width: W, height: H, cellSize: 8 }, tiles, metadata: { rooms: rooms.length, threshold: thresh } };
+      }
+
+      function downloadJson(env) {
+        const blob = new Blob([JSON.stringify(env, null, 2) + '\n'], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url; link.download = '13-gaussian-rooms-sample-output.json';
+        document.body.appendChild(link); link.click();
+        document.body.removeChild(link); URL.revokeObjectURL(url);
+      }
+
+      let currentEnvironment;
+      function update() {
+        draw();
+        currentEnvironment = buildEnvironment();
+        const floorTiles = currentEnvironment.tiles.flat().filter(t => t === 'floor').length;
+        stats.textContent = `Floor tiles: ${floorTiles} of ${currentEnvironment.space.width * currentEnvironment.space.height}.`;
+        message.textContent = '';
+        output.textContent = JSON.stringify(currentEnvironment, null, 2);
+      }
+
+      update();
+      document.getElementById('controls').addEventListener('submit', e => { e.preventDefault(); update(); });
+      exportButton.addEventListener('click', () => downloadJson(currentEnvironment));
 
       // ── 3D view ──────────────────────────────────────────────────────────────
       const aframeEl = document.getElementById('aframe-container');
