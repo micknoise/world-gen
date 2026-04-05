@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Domain Warp Cave</title>
     <link rel="stylesheet" href="../../styles.css" />
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.7.0/dist/aframe-extras.min.js"></script>
+    <script src="../../shared/aframe-renderer.js"></script>
   </head>
   <body>
     <main class="tutorial-page">
@@ -40,6 +43,16 @@
           </form>
         </aside>
       </section>
+      <div class="view-toggle-bar">
+        <button class="btn-3d" id="btn-3d" type="button">View in 3D</button>
+        <select id="sel-mode" style="display:none">
+          <option value="indoor">Indoor</option>
+          <option value="outdoor">Outdoor</option>
+        </select>
+      </div>
+      <div class="aframe-panel" id="aframe-container" style="display:none">
+        <div class="aframe-hint">Click scene to capture cursor · WASD to move · Esc to release</div>
+      </div>
     </main>
     <script>
       const canvas = document.getElementById('map');
@@ -87,8 +100,46 @@
         }
       }
 
+      function getFieldFn() {
+        const seed    = +document.getElementById('seed').value;
+        const scale   = Math.max(1, +document.getElementById('scale').value);
+        const octaves = Math.max(1, Math.min(8, +document.getElementById('octaves').value | 0));
+        const warp    = +document.getElementById('warp').value;
+        return (col, row) => {
+          const nx = col / scale, ny = row / scale;
+          const wx = fbm(nx + 1.7, ny + 9.2, seed,     octaves);
+          const wy = fbm(nx + 8.3, ny + 2.8, seed + 1, octaves);
+          return fbm(nx + warp * wx, ny + warp * wy, seed + 2, octaves);
+        };
+      }
+
       draw();
       document.getElementById('controls').addEventListener('submit', e => { e.preventDefault(); draw(); });
+
+      // ── 3D view ──────────────────────────────────────────────────────────────
+      const aframeEl = document.getElementById('aframe-container');
+      const btn3d = document.getElementById('btn-3d');
+      const selMode = document.getElementById('sel-mode');
+      let is3d = false;
+
+      function getW() { return Math.max(4, +document.getElementById('width').value | 0); }
+      function getH() { return Math.max(4, +document.getElementById('height').value | 0); }
+      function getThresh() { return +document.getElementById('threshold').value / 100; }
+
+      function render3d() {
+        AFrameRenderer.renderContinuousField(getFieldFn(), getW(), getH(), getThresh(), aframeEl, { mode: selMode.value });
+      }
+
+      btn3d.addEventListener('click', () => {
+        is3d = !is3d;
+        btn3d.textContent = is3d ? 'View in 2D' : 'View in 3D';
+        btn3d.classList.toggle('active', is3d);
+        aframeEl.style.display = is3d ? 'block' : 'none';
+        selMode.style.display = is3d ? 'inline-block' : 'none';
+        if (is3d) render3d(); else AFrameRenderer.destroyScene(aframeEl);
+      });
+      selMode.addEventListener('change', () => { if (is3d) render3d(); });
+      document.getElementById('controls').addEventListener('submit', () => { if (is3d) render3d(); });
     </script>
   </body>
 </html>

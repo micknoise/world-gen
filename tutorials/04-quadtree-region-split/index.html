@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Quadtree Region Split</title>
     <link rel="stylesheet" href="../../styles.css" />
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.7.0/dist/aframe-extras.min.js"></script>
+    <script src="../../shared/aframe-renderer.js"></script>
   </head>
   <body>
     <main class="tutorial-page">
@@ -41,6 +44,16 @@
           </form>
         </aside>
       </section>
+      <div class="view-toggle-bar">
+        <button class="btn-3d" id="btn-3d" type="button">View in 3D</button>
+        <select id="sel-mode" style="display:none">
+          <option value="indoor">Indoor</option>
+          <option value="outdoor">Outdoor</option>
+        </select>
+      </div>
+      <div class="aframe-panel" id="aframe-container" style="display:none">
+        <div class="aframe-hint">Click scene to capture cursor · WASD to move · Esc to release</div>
+      </div>
       <section class="json-panel">
         <h2>Environment JSON</h2>
         <pre id="output"></pre>
@@ -183,6 +196,27 @@
         currentEnvironment = update();
       });
       exportButton.addEventListener("click", () => downloadJson(currentEnvironment));
+
+      // ── 3D view ──────────────────────────────────────────────────────────────
+      const aframeEl = document.getElementById("aframe-container");
+      const btn3d = document.getElementById("btn-3d");
+      const selMode = document.getElementById("sel-mode");
+      let is3d = false;
+
+      function render3d() {
+        AFrameRenderer.renderGridEnv(currentEnvironment, aframeEl, { mode: selMode.value });
+      }
+
+      btn3d.addEventListener("click", () => {
+        is3d = !is3d;
+        btn3d.textContent = is3d ? "View in 2D" : "View in 3D";
+        btn3d.classList.toggle("active", is3d);
+        aframeEl.style.display = is3d ? "block" : "none";
+        selMode.style.display = is3d ? "inline-block" : "none";
+        if (is3d) render3d(); else AFrameRenderer.destroyScene(aframeEl);
+      });
+      selMode.addEventListener("change", () => { if (is3d) render3d(); });
+      form.addEventListener("submit", () => { if (is3d) render3d(); });
     </script>
   </body>
 </html>
