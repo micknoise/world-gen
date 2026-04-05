@@ -40,3 +40,15 @@ All tutorials generate a JSON object with the same core structure:
 - optional `tiles`, `regions`, `paths`, `graph`, `markers`, and `metadata`
 
 The renderer uses that object as the source of truth so the output can be reused by other rendering approaches beyond Canvas.
+
+## Developer notes
+
+- A shared runtime and utilities were added in `shared/tutorial-runtime.js` and `shared/utils.js` to centralise wiring (Generate/Export/3D toggles) and reduce duplication across tutorials.
+- Tutorials were migrated to import the runtime as ES modules and now call `initTutorial(...)` from their script blocks.
+- Quick smoke check (verifies tutorials import the runtime):
+
+```bash
+python3 tools/smoke_check.py
+```
+
+Work was done on branch `refactor/simplify-runtime`.
