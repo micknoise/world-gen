@@ -91,70 +91,57 @@
         };
       }
 
-      function addLeaf(region, regions) {
-        regions.push({
-          id: `sector-${regions.length + 1}`,
-          kind: "sector",
-          shape: "rect",
-          x: region.x,
-          y: region.y,
-          width: region.width,
-          height: region.height
-        });
-      }
-
-      function splitRegion(region, random, maxDepth, splitChance, minSize, forceSplitDepth, regions) {
-        const canSplit =
-          region.depth < maxDepth &&
-          Math.floor(region.width / 2) >= minSize &&
-          Math.floor(region.height / 2) >= minSize;
-        const shouldSplit = canSplit && (region.depth < forceSplitDepth || random() < splitChance / 100);
-        if (!shouldSplit) {
-          addLeaf(region, regions);
-          return;
-        }
-
-        const leftWidth = Math.floor(region.width / 2);
-        const rightWidth = region.width - leftWidth;
-        const topHeight = Math.floor(region.height / 2);
-        const bottomHeight = region.height - topHeight;
-        const nextDepth = region.depth + 1;
-
-        splitRegion({ x: region.x, y: region.y, width: leftWidth, height: topHeight, depth: nextDepth }, random, maxDepth, splitChance, minSize, forceSplitDepth, regions);
-        splitRegion({ x: region.x + leftWidth, y: region.y, width: rightWidth, height: topHeight, depth: nextDepth }, random, maxDepth, splitChance, minSize, forceSplitDepth, regions);
-        splitRegion({ x: region.x, y: region.y + topHeight, width: leftWidth, height: bottomHeight, depth: nextDepth }, random, maxDepth, splitChance, minSize, forceSplitDepth, regions);
-        splitRegion({ x: region.x + leftWidth, y: region.y + topHeight, width: rightWidth, height: bottomHeight, depth: nextDepth }, random, maxDepth, splitChance, minSize, forceSplitDepth, regions);
-      }
+      const SCALE = 8;
+      const COLORS = ["#d57a66", "#5a8f7b", "#d0a95f", "#6b8bc9", "#b484c4", "#8f784f"];
 
       function generateEnvironment(seed, width, height, maxDepth, splitChance) {
         const random = createRng(seed);
         const regions = [];
-        splitRegion({ x: 0, y: 0, width: Math.floor(width), height: Math.floor(height), depth: 0 }, random, maxDepth, splitChance, 12, 1, regions);
+
+        function split(region) {
+          const canSplit =
+            region.depth < maxDepth &&
+            Math.floor(region.width / 2) >= 12 &&
+            Math.floor(region.height / 2) >= 12;
+          const shouldSplit = canSplit && (region.depth < 1 || random() < splitChance / 100);
+          if (!shouldSplit) {
+            regions.push({ id: `sector-${regions.length + 1}`, kind: "sector", shape: "rect", x: region.x, y: region.y, width: region.width, height: region.height });
+            return;
+          }
+          const lw = Math.floor(region.width / 2), rw = region.width - lw;
+          const th = Math.floor(region.height / 2), bh = region.height - th;
+          const d = region.depth + 1;
+          split({ x: region.x,      y: region.y,      width: lw, height: th, depth: d });
+          split({ x: region.x + lw, y: region.y,      width: rw, height: th, depth: d });
+          split({ x: region.x,      y: region.y + th, width: lw, height: bh, depth: d });
+          split({ x: region.x + lw, y: region.y + th, width: rw, height: bh, depth: d });
+        }
+
+        split({ x: 0, y: 0, width: Math.floor(width), height: Math.floor(height), depth: 0 });
         return {
           version: "1.0",
           algorithm: "quadtree",
           seed,
           space: { mode: "continuous", width, height },
           regions,
-          markers: regions.slice(0, 8).map((region) => ({ kind: "center", x: region.x + region.width / 2, y: region.y + region.height / 2 })),
+          markers: regions.slice(0, 8).map((r) => ({ kind: "center", x: r.x + r.width / 2, y: r.y + r.height / 2 })),
           metadata: { regionCount: regions.length, maxDepth }
         };
       }
 
       function renderEnvironment(environment) {
-        const scale = 8;
-        const colors = ["#d57a66", "#5a8f7b", "#d0a95f", "#6b8bc9", "#b484c4", "#8f784f"];
-        canvas.width = environment.space.width * scale;
-        canvas.height = environment.space.height * scale;
+        canvas.width = environment.space.width * SCALE;
+        canvas.height = environment.space.height * SCALE;
         const ctx = canvas.getContext("2d");
         ctx.fillStyle = "#fff";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         environment.regions.forEach((region, index) => {
-          ctx.fillStyle = `${colors[index % colors.length]}88`;
-          ctx.strokeStyle = colors[index % colors.length];
-          ctx.fillRect(region.x * scale, region.y * scale, region.width * scale, region.height * scale);
-          ctx.strokeRect(region.x * scale, region.y * scale, region.width * scale, region.height * scale);
+          const color = COLORS[index % COLORS.length];
+          ctx.fillStyle = `${color}88`;
+          ctx.strokeStyle = color;
+          ctx.fillRect(region.x * SCALE, region.y * SCALE, region.width * SCALE, region.height * SCALE);
+          ctx.strokeRect(region.x * SCALE, region.y * SCALE, region.width * SCALE, region.height * SCALE);
         });
       }
 

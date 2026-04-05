@@ -74,31 +74,27 @@
         return v / total;
       }
 
-      function draw() {
-        const seed    = +document.getElementById('seed').value;
-        const W       = Math.max(4, +document.getElementById('width').value | 0);
-        const H       = Math.max(4, +document.getElementById('height').value | 0);
-        const scale   = Math.max(1, +document.getElementById('scale').value);
-        const octaves = Math.max(1, Math.min(8, +document.getElementById('octaves').value | 0));
-        const thresh  = +document.getElementById('threshold').value / 100;
-        const cell = 8;
-        canvas.width = W * cell; canvas.height = H * cell;
-        const ctx = canvas.getContext('2d');
-
-        for (let y = 0; y < H; y++) {
-          for (let x = 0; x < W; x++) {
-            const v = ridgedFbm(x / scale, y / scale, seed, octaves);
-            ctx.fillStyle = v > thresh ? '#d4c9a8' : '#1a1f24';
-            ctx.fillRect(x * cell, y * cell, cell, cell);
-          }
-        }
-      }
-
       function getFieldFn() {
         const seed    = +document.getElementById('seed').value;
         const scale   = Math.max(1, +document.getElementById('scale').value);
         const octaves = Math.max(1, Math.min(8, +document.getElementById('octaves').value | 0));
         return (col, row) => ridgedFbm(col / scale, row / scale, seed, octaves);
+      }
+
+      function draw() {
+        const W      = Math.max(4, +document.getElementById('width').value | 0);
+        const H      = Math.max(4, +document.getElementById('height').value | 0);
+        const thresh = +document.getElementById('threshold').value / 100;
+        const fieldFn = getFieldFn();
+        const cell = 8;
+        canvas.width = W * cell; canvas.height = H * cell;
+        const ctx = canvas.getContext('2d');
+        for (let y = 0; y < H; y++) {
+          for (let x = 0; x < W; x++) {
+            ctx.fillStyle = fieldFn(x, y) > thresh ? '#d4c9a8' : '#1a1f24';
+            ctx.fillRect(x * cell, y * cell, cell, cell);
+          }
+        }
       }
 
       draw();
@@ -110,12 +106,11 @@
       const selMode = document.getElementById('sel-mode');
       let is3d = false;
 
-      function getW() { return Math.max(4, +document.getElementById('width').value | 0); }
-      function getH() { return Math.max(4, +document.getElementById('height').value | 0); }
-      function getThresh() { return +document.getElementById('threshold').value / 100; }
-
       function render3d() {
-        AFrameRenderer.renderContinuousField(getFieldFn(), getW(), getH(), getThresh(), aframeEl, { mode: selMode.value });
+        const W = Math.max(4, +document.getElementById('width').value | 0);
+        const H = Math.max(4, +document.getElementById('height').value | 0);
+        const thresh = +document.getElementById('threshold').value / 100;
+        AFrameRenderer.renderContinuousField(getFieldFn(), W, H, thresh, aframeEl, { mode: selMode.value });
       }
 
       btn3d.addEventListener('click', () => {

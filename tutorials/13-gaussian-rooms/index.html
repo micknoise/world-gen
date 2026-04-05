@@ -58,32 +58,35 @@
 
       const rng = (i, seed) => { const v = Math.sin(i * 127.1 + seed * 311.7) * 43758.5453; return v - Math.floor(v); };
 
-      function draw() {
+      function buildRooms() {
         const seed   = +document.getElementById('seed').value;
         const W      = Math.max(4, +document.getElementById('width').value | 0);
         const H      = Math.max(4, +document.getElementById('height').value | 0);
         const count  = Math.max(1, Math.min(64, +document.getElementById('rooms').value | 0));
         const spread = Math.max(1, +document.getElementById('spread').value);
+        return {
+          W, H,
+          rooms: Array.from({ length: count }, (_, i) => ({
+            x: rng(i*3,   seed) * W,
+            y: rng(i*3+1, seed) * H,
+            s: rng(i*3+2, seed) * spread * 0.8 + spread * 0.5
+          }))
+        };
+      }
+
+      function draw() {
+        const { W, H, rooms } = buildRooms();
         const thresh = +document.getElementById('threshold').value / 100;
         const cell = 8;
         canvas.width = W * cell; canvas.height = H * cell;
         const ctx = canvas.getContext('2d');
-
-        const rooms = Array.from({ length: count }, (_, i) => ({
-          x: rng(i*3,   seed) * W,
-          y: rng(i*3+1, seed) * H,
-          s: rng(i*3+2, seed) * spread * 0.8 + spread * 0.5   // vary each room's spread a little
-        }));
-
         for (let y = 0; y < H; y++) {
           for (let x = 0; x < W; x++) {
-            // Sum of Gaussians: each room contributes exp(-d² / 2σ²)
             let density = 0;
             for (const r of rooms) {
               const d2 = (x - r.x) ** 2 + (y - r.y) ** 2;
               density += Math.exp(-d2 / (2 * r.s * r.s));
             }
-            // Shade by density for a smooth gradient floor
             if (density > thresh) {
               const brightness = Math.min(1, (density - thresh) / thresh);
               const f = Math.round(180 + brightness * 40);
@@ -98,16 +101,7 @@
       }
 
       function getFieldFn() {
-        const seed   = +document.getElementById('seed').value;
-        const W      = Math.max(4, +document.getElementById('width').value | 0);
-        const H      = Math.max(4, +document.getElementById('height').value | 0);
-        const count  = Math.max(1, Math.min(64, +document.getElementById('rooms').value | 0));
-        const spread = Math.max(1, +document.getElementById('spread').value);
-        const rooms = Array.from({ length: count }, (_, i) => ({
-          x: rng(i*3,   seed) * W,
-          y: rng(i*3+1, seed) * H,
-          s: rng(i*3+2, seed) * spread * 0.8 + spread * 0.5
-        }));
+        const { rooms } = buildRooms();
         return (col, row) => {
           let density = 0;
           for (const r of rooms) {
@@ -127,12 +121,11 @@
       const selMode = document.getElementById('sel-mode');
       let is3d = false;
 
-      function getW() { return Math.max(4, +document.getElementById('width').value | 0); }
-      function getH() { return Math.max(4, +document.getElementById('height').value | 0); }
-      function getThresh() { return +document.getElementById('threshold').value / 100; }
-
       function render3d() {
-        AFrameRenderer.renderContinuousField(getFieldFn(), getW(), getH(), getThresh(), aframeEl, { mode: selMode.value });
+        const W = Math.max(4, +document.getElementById('width').value | 0);
+        const H = Math.max(4, +document.getElementById('height').value | 0);
+        const thresh = +document.getElementById('threshold').value / 100;
+        AFrameRenderer.renderContinuousField(getFieldFn(), W, H, thresh, aframeEl, { mode: selMode.value });
       }
 
       btn3d.addEventListener('click', () => {

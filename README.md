@@ -21,6 +21,11 @@ Each tutorial:
 6. Voronoi Region Map
 7. Delaunay Plus MST Room Graph
 8. Noise Terrain Map
+9. Ridge Dungeon
+10. SDF Rooms
+11. Domain Warp Cave
+12. Wave Dungeon
+13. Gaussian Rooms
 
 Open [index.html](./index.html) in a browser to navigate the tutorials.
 

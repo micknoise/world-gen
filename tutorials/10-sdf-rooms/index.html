@@ -71,24 +71,18 @@
         return Math.min(a, b) - h * h * k / 4;
       }
 
-      function draw() {
-        const seed   = +document.getElementById('seed').value;
-        const W      = Math.max(4, +document.getElementById('width').value | 0);
-        const H      = Math.max(4, +document.getElementById('height').value | 0);
-        const count  = Math.max(2, Math.min(24, +document.getElementById('rooms').value | 0));
-        const corrW  = Math.max(1, +document.getElementById('corridor').value);
-        const k      = Math.max(0.1, +document.getElementById('smooth').value);
-        const cell = 8;
-        canvas.width = W * cell; canvas.height = H * cell;
-        const ctx = canvas.getContext('2d');
-
+      function buildScene() {
+        const seed  = +document.getElementById('seed').value;
+        const W     = Math.max(4, +document.getElementById('width').value | 0);
+        const H     = Math.max(4, +document.getElementById('height').value | 0);
+        const count = Math.max(2, Math.min(24, +document.getElementById('rooms').value | 0));
+        const corrW = Math.max(1, +document.getElementById('corridor').value);
+        const k     = Math.max(0.1, +document.getElementById('smooth').value);
         const rooms = Array.from({ length: count }, (_, i) => ({
           x: rng(i*3,   seed) * W * 0.8 + W * 0.1,
           y: rng(i*3+1, seed) * H * 0.8 + H * 0.1,
           r: rng(i*3+2, seed) * 10 + 7
         }));
-
-        // Each room connects to its single nearest neighbour
         const corridors = rooms.map((a, i) => {
           let best = -1, bestDist = Infinity;
           rooms.forEach((b, j) => {
@@ -98,47 +92,33 @@
           });
           return { a, b: rooms[best] };
         });
+        const sdf = (col, row) => {
+          let d = Infinity;
+          for (const rm of rooms)    d = smin(d, sdCircle(col, row, rm.x, rm.y, rm.r), k);
+          for (const c of corridors) d = smin(d, sdCapsule(col, row, c.a.x, c.a.y, c.b.x, c.b.y, corrW), k);
+          return d;
+        };
+        return { W, H, sdf };
+      }
 
+      function draw() {
+        const { W, H, sdf } = buildScene();
+        const cell = 8;
+        canvas.width = W * cell; canvas.height = H * cell;
+        const ctx = canvas.getContext('2d');
         for (let y = 0; y < H; y++) {
           for (let x = 0; x < W; x++) {
-            let d = Infinity;
-            for (const rm of rooms)     d = smin(d, sdCircle(x, y, rm.x, rm.y, rm.r), k);
-            for (const c of corridors)  d = smin(d, sdCapsule(x, y, c.a.x, c.a.y, c.b.x, c.b.y, corrW), k);
-
+            const d = sdf(x, y);
             ctx.fillStyle = d < 0 ? '#c8b89a' : d < 2.5 ? '#3a3022' : '#161b22';
             ctx.fillRect(x * cell, y * cell, cell, cell);
           }
         }
       }
 
-      // getFieldFn returns -d so that values > 0 = inside rooms (floor), values <= 0 = wall
+      // getFieldFn returns -sdf so that values > 0 = inside rooms (floor), values <= 0 = wall
       function getFieldFn() {
-        const seed   = +document.getElementById('seed').value;
-        const W      = Math.max(4, +document.getElementById('width').value | 0);
-        const H      = Math.max(4, +document.getElementById('height').value | 0);
-        const count  = Math.max(2, Math.min(24, +document.getElementById('rooms').value | 0));
-        const corrW  = Math.max(1, +document.getElementById('corridor').value);
-        const k      = Math.max(0.1, +document.getElementById('smooth').value);
-        const rooms = Array.from({ length: count }, (_, i) => ({
-          x: rng(i*3,   seed) * W * 0.8 + W * 0.1,
-          y: rng(i*3+1, seed) * H * 0.8 + H * 0.1,
-          r: rng(i*3+2, seed) * 10 + 7
-        }));
-        const corridors = rooms.map((a, i) => {
-          let best = -1, bestDist = Infinity;
-          rooms.forEach((b, j) => {
-            if (i === j) return;
-            const d = Math.hypot(a.x - b.x, a.y - b.y);
-            if (d < bestDist) { bestDist = d; best = j; }
-          });
-          return { a, b: rooms[best] };
-        });
-        return (col, row) => {
-          let d = Infinity;
-          for (const rm of rooms)    d = smin(d, sdCircle(col, row, rm.x, rm.y, rm.r), k);
-          for (const c of corridors) d = smin(d, sdCapsule(col, row, c.a.x, c.a.y, c.b.x, c.b.y, corrW), k);
-          return -d; // negate: positive inside shapes = floor
-        };
+        const { sdf } = buildScene();
+        return (col, row) => -sdf(col, row);
       }
 
       draw();
@@ -150,12 +130,11 @@
       const selMode = document.getElementById('sel-mode');
       let is3d = false;
 
-      function getW() { return Math.max(4, +document.getElementById('width').value | 0); }
-      function getH() { return Math.max(4, +document.getElementById('height').value | 0); }
-
       function render3d() {
+        const W = Math.max(4, +document.getElementById('width').value | 0);
+        const H = Math.max(4, +document.getElementById('height').value | 0);
         // threshold=0: fieldFn > 0 means inside a room/corridor (floor)
-        AFrameRenderer.renderContinuousField(getFieldFn(), getW(), getH(), 0, aframeEl, { mode: selMode.value });
+        AFrameRenderer.renderContinuousField(getFieldFn(), W, H, 0, aframeEl, { mode: selMode.value });
       }
 
       btn3d.addEventListener('click', () => {
